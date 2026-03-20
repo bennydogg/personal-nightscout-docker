@@ -5,6 +5,10 @@
 
 set -e
 
+# Detect HOST_PORT from .env
+DBG_HOST_PORT=$(grep "^HOST_PORT=" .env 2>/dev/null | cut -d'=' -f2)
+DBG_HOST_PORT=${DBG_HOST_PORT:-8080}
+
 echo "🔍 Cloudflare Tunnel Debug & Diagnostic Tool"
 echo "============================================"
 
@@ -139,12 +143,12 @@ print_section "5. NETWORK CONNECTIVITY"
 
 # Test local Nightscout
 print_info "Testing local Nightscout on port 8080..."
-if curl -s -f "http://localhost:8080/api/v1/status" >/dev/null 2>&1; then
+if curl -s -f "http://localhost:${DBG_HOST_PORT}/api/v1/status" >/dev/null 2>&1; then
     print_status "Nightscout is running locally"
-    LOCAL_STATUS=$(curl -s "http://localhost:8080/api/v1/status" 2>/dev/null)
+    LOCAL_STATUS=$(curl -s "http://localhost:${DBG_HOST_PORT}/api/v1/status" 2>/dev/null)
     print_info "Local status: $LOCAL_STATUS"
 else
-    print_warning "Nightscout is not responding on localhost:8080"
+    print_warning "Nightscout is not responding on localhost:${DBG_HOST_PORT}"
     print_info "Check if containers are running: docker ps"
 fi
 
@@ -213,7 +217,7 @@ else
     echo "4. Re-run setup: ./setup-cloudflare.sh"
 fi
 
-if ! curl -s -f "http://localhost:8080/api/v1/status" >/dev/null 2>&1; then
+if ! curl -s -f "http://localhost:${DBG_HOST_PORT}/api/v1/status" >/dev/null 2>&1; then
     print_warning "Nightscout is not running locally"
     echo "Start Nightscout first:"
     echo "1. docker-compose up -d"

@@ -3,7 +3,7 @@
 # MongoDB Atlas Export Script for Nightscout Migration
 # This script exports your Nightscout database from MongoDB Atlas
 
-set -e
+set -eo pipefail
 
 # Configuration
 ATLAS_CONNECTION_STRING=""
@@ -93,22 +93,30 @@ mkdir -p "$EXPORT_DIR"
 echo -e "${YELLOW}Exporting database from Atlas...${NC}"
 if [ "$OPLOG_ENABLED" = true ]; then
     echo "Using oplog for point-in-time consistency..."
-    mongodump --uri="$ATLAS_CONNECTION_STRING" --db="$DATABASE_NAME" --oplog --out="$EXPORT_DIR"
+    if mongodump --uri="$ATLAS_CONNECTION_STRING" --db="$DATABASE_NAME" --oplog --out="$EXPORT_DIR"; then
+        EXPORT_OK=true
+    else
+        EXPORT_OK=false
+    fi
 else
-    mongodump --uri="$ATLAS_CONNECTION_STRING" --db="$DATABASE_NAME" --out="$EXPORT_DIR"
+    if mongodump --uri="$ATLAS_CONNECTION_STRING" --db="$DATABASE_NAME" --out="$EXPORT_DIR"; then
+        EXPORT_OK=true
+    else
+        EXPORT_OK=false
+    fi
 fi
 
-if [ $? -eq 0 ]; then
+if [ "$EXPORT_OK" = true ]; then
     echo -e "${GREEN}Export completed successfully!${NC}"
     echo "Export location: $EXPORT_DIR"
-    
+
     # Display export statistics
     if [ -d "$EXPORT_DIR/$DATABASE_NAME" ]; then
         echo "Collections exported:"
         ls -la "$EXPORT_DIR/$DATABASE_NAME" | grep -E '\.bson$' | wc -l | xargs echo "  Count:"
         du -sh "$EXPORT_DIR" | cut -f1 | xargs echo "  Total size:"
     fi
-    
+
     echo ""
     echo "To import this data to your new Nightscout instance, use:"
     if [ "$OPLOG_ENABLED" = true ]; then
@@ -116,10 +124,6 @@ if [ $? -eq 0 ]; then
     else
         echo "  ./import-to-vm.sh -d $EXPORT_DIR/$DATABASE_NAME -t mongodb://localhost:27017"
     fi
-    
-    echo ""
-    echo -e "${YELLOW}Important: Nightscout connection string format:${NC}"
-    echo "  MONGODB_URI=mongodb://username:password@your-server:27017/nightscout"
 else
     echo -e "${RED}Export failed!${NC}"
     exit 1

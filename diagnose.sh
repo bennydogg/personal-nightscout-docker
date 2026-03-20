@@ -179,19 +179,23 @@ fi
 echo
 print_info "Testing Nightscout connectivity..."
 
+# Detect HOST_PORT from .env
+DIAG_HOST_PORT=$(grep "^HOST_PORT=" .env 2>/dev/null | cut -d'=' -f2)
+DIAG_HOST_PORT=${DIAG_HOST_PORT:-8080}
+
 if command -v curl >/dev/null 2>&1; then
-    HTTP_RESPONSE=$(curl -s -w "%{http_code}" http://localhost:8080/api/v1/status 2>/dev/null || echo "000")
-    
+    HTTP_RESPONSE=$(curl -s -w "%{http_code}" "http://localhost:${DIAG_HOST_PORT}/api/v1/status" 2>/dev/null || echo "000")
+
     if [ "$HTTP_RESPONSE" = "200" ]; then
-        print_status "Nightscout is responding on port 8080"
-        
+        print_status "Nightscout is responding on port $DIAG_HOST_PORT"
+
         # Get detailed status
-        STATUS_JSON=$(curl -s http://localhost:8080/api/v1/status 2>/dev/null || echo "{}")
+        STATUS_JSON=$(curl -s "http://localhost:${DIAG_HOST_PORT}/api/v1/status" 2>/dev/null || echo "{}")
         if echo "$STATUS_JSON" | grep -q "status"; then
             echo "Status response: $STATUS_JSON"
         fi
     elif [ "$HTTP_RESPONSE" = "000" ]; then
-        print_error "Cannot connect to Nightscout on port 8080"
+        print_error "Cannot connect to Nightscout on port $DIAG_HOST_PORT"
         print_info "Make sure Nightscout is running: docker-compose up -d"
     else
         print_warning "Nightscout returned HTTP $HTTP_RESPONSE"
@@ -292,16 +296,18 @@ print_header "LOG ANALYSIS"
 
 print_info "Recent Docker logs for Nightscout:"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    if docker ps --format "{{.Names}}" | grep -q "nightscout"; then
-        docker logs --tail=10 nightscout 2>/dev/null || print_warning "Cannot get Nightscout logs"
+    DIAG_NS_ID=$(docker-compose ps -q nightscout 2>/dev/null)
+    if [ -n "$DIAG_NS_ID" ]; then
+        docker logs --tail=10 "$DIAG_NS_ID" 2>/dev/null || print_warning "Cannot get Nightscout logs"
     else
         print_warning "Nightscout container not found"
     fi
-    
+
     echo
     print_info "Recent Docker logs for MongoDB:"
-    if docker ps --format "{{.Names}}" | grep -q "mongo"; then
-        docker logs --tail=5 nightscout_mongo 2>/dev/null || print_warning "Cannot get MongoDB logs"
+    DIAG_MONGO_ID=$(docker-compose ps -q mongo 2>/dev/null)
+    if [ -n "$DIAG_MONGO_ID" ]; then
+        docker logs --tail=5 "$DIAG_MONGO_ID" 2>/dev/null || print_warning "Cannot get MongoDB logs"
     else
         print_warning "MongoDB container not found"
     fi
@@ -333,4 +339,4 @@ echo "  - Check all services: ./diagnose.sh"
 echo "  - Monitor containers: docker stats"
 echo "  - View logs: docker-compose logs -f"
 echo "  - Restart services: docker-compose restart"
-echo "  - Tunnel status: ./tunnel-status.sh"
+echo "  - Tunnel status: sudo systemctl status cloudflared"

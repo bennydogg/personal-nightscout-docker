@@ -3,7 +3,7 @@
 # MongoDB Import Script for Nightscout Migration
 # This script imports your Nightscout database to a new MongoDB instance
 
-set -e
+set -eo pipefail
 
 # Configuration
 TARGET_CONNECTION_STRING=""
@@ -144,40 +144,41 @@ if [ "$OPLOG_REPLAY" = true ]; then
     echo "Oplog replay: enabled"
 fi
 
-# Build mongorestore command with performance optimizations
-RESTORE_CMD="mongorestore --uri=\"$TARGET_CONNECTION_STRING\" --db=\"$DATABASE_NAME\""
-RESTORE_CMD="$RESTORE_CMD --numParallelCollections=$NUM_PARALLEL_COLLECTIONS"
-RESTORE_CMD="$RESTORE_CMD --numInsertionWorkersPerCollection=$NUM_INSERTION_WORKERS"
+# Build mongorestore command as an array (avoids eval/injection risks)
+RESTORE_ARGS=(
+    mongorestore
+    --uri="$TARGET_CONNECTION_STRING"
+    --db="$DATABASE_NAME"
+    --numParallelCollections="$NUM_PARALLEL_COLLECTIONS"
+    --numInsertionWorkersPerCollection="$NUM_INSERTION_WORKERS"
+)
 
 if [ "$DROP_EXISTING" = true ]; then
     echo -e "${YELLOW}Dropping existing database and importing...${NC}"
-    RESTORE_CMD="$RESTORE_CMD --drop"
+    RESTORE_ARGS+=(--drop)
 else
     echo -e "${YELLOW}Importing database (existing data will be preserved)...${NC}"
 fi
 
 if [ "$OPLOG_REPLAY" = true ]; then
     echo "Applying oplog for point-in-time consistency..."
-    RESTORE_CMD="$RESTORE_CMD --oplogReplay"
+    RESTORE_ARGS+=(--oplogReplay)
 fi
 
-RESTORE_CMD="$RESTORE_CMD --dir=\"$IMPORT_DIR\""
+RESTORE_ARGS+=(--dir="$IMPORT_DIR")
 
 # Execute the restore command
-eval $RESTORE_CMD
-
-if [ $? -eq 0 ]; then
+if "${RESTORE_ARGS[@]}"; then
     echo -e "${GREEN}Import completed successfully!${NC}"
-    
-    # Display import statistics
+
     echo ""
     echo -e "${GREEN}Import Summary:${NC}"
     echo "Database: $DATABASE_NAME"
-    
+
     echo ""
     echo -e "${YELLOW}Next steps for Nightscout configuration:${NC}"
     echo "1. Update your Nightscout environment variables:"
-    
+
     # Extract components for proper MONGODB_URI format
     if [[ "$TARGET_CONNECTION_STRING" =~ mongodb://([^@]+@)?([^/]+)(/.*)? ]]; then
         HOST_PART="${BASH_REMATCH[2]}"
@@ -190,17 +191,10 @@ if [ $? -eq 0 ]; then
     else
         echo "   MONGODB_URI=$TARGET_CONNECTION_STRING/$DATABASE_NAME"
     fi
-    
+
     echo "2. Restart your Nightscout application"
     echo "3. Test database connectivity and verify historical data"
     echo "4. Check Nightscout logs for any connection issues"
-    
-    echo ""
-    echo -e "${YELLOW}Nightscout-specific notes:${NC}"
-    echo "- Ensure API_SECRET is properly configured"
-    echo "- Add 'dbsize' to ENABLE variable to monitor database size"
-    echo "- Free MongoDB instances have 512MB limits"
-    
 else
     echo -e "${RED}Import failed!${NC}"
     echo "Check MongoDB logs and connection string format"

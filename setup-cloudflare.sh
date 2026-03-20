@@ -428,49 +428,42 @@ print_status "Docker Compose override created"
 # Create management scripts
 print_info "Creating management scripts..."
 
-cat > tunnel-status.sh << 'EOF'
+# Generate management scripts with the tunnel name baked in
+cat > tunnel-status.sh << MGMT_EOF
 #!/bin/bash
-echo "🔍 Cloudflare Tunnel Status"
-echo "==========================="
+echo "Cloudflare Tunnel Status"
+echo "========================"
 
-# Check if tunnel is running
 if sudo systemctl is-active --quiet cloudflared; then
     echo "✓ Tunnel service is running"
 else
     echo "✗ Tunnel service is not running"
 fi
 
-# Check tunnel connections
 echo ""
 echo "Tunnel connections:"
 cloudflared tunnel list
 
-# Check tunnel information
 echo ""
 echo "Tunnel information:"
-cloudflared tunnel info "$TUNNEL_NAME" 2>/dev/null || echo "Tunnel info not available (requires newer cloudflared version)"
-EOF
+cloudflared tunnel info "$TUNNEL_NAME" 2>/dev/null || echo "Tunnel info not available"
+MGMT_EOF
 
-chmod +x tunnel-status.sh
-
-cat > tunnel-logs.sh << 'EOF'
+cat > tunnel-logs.sh << 'MGMT_EOF'
 #!/bin/bash
-echo "📋 Cloudflare Tunnel Logs"
-echo "========================"
+echo "Cloudflare Tunnel Logs"
+echo "======================"
 sudo journalctl -u cloudflared -f
-EOF
+MGMT_EOF
 
-chmod +x tunnel-logs.sh
-
-cat > tunnel-restart.sh << 'EOF'
+cat > tunnel-restart.sh << 'MGMT_EOF'
 #!/bin/bash
-echo "🔄 Restarting Cloudflare Tunnel"
-echo "=============================="
+echo "Restarting Cloudflare Tunnel..."
 sudo systemctl restart cloudflared
 echo "✓ Tunnel restarted"
-EOF
+MGMT_EOF
 
-chmod +x tunnel-restart.sh
+chmod +x tunnel-status.sh tunnel-logs.sh tunnel-restart.sh
 
 print_status "Management scripts created"
 
@@ -624,19 +617,23 @@ echo "📚 For more information, see:"
 echo "- https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/"
 echo "- https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/"
 echo
-if curl -s -f "http://localhost:8080/api/v1/status" > /dev/null 2>&1; then
+# Detect HOST_PORT from .env
+_HOST_PORT=$(grep "^HOST_PORT=" .env 2>/dev/null | cut -d'=' -f2)
+_HOST_PORT=${_HOST_PORT:-8080}
+
+if curl -s -f "http://localhost:${_HOST_PORT}/api/v1/status" > /dev/null 2>&1; then
     echo "🚀 Nightscout is running and tunnel is configured!"
     echo
     echo "🌐 Your Nightscout is available at:"
-    echo "   - Local: http://localhost:8080"
+    echo "   - Local: http://localhost:${_HOST_PORT}"
     echo "   - External: https://$DOMAIN"
 else
     echo "🚀 Tunnel is configured! Nightscout should start automatically."
     echo
     echo "🌐 Your Nightscout will be available at:"
-    echo "   - Local: http://localhost:8080"
+    echo "   - Local: http://localhost:${_HOST_PORT}"
     echo "   - External: https://$DOMAIN"
     echo
     echo "If Nightscout isn't running, start it with:"
     echo "   docker-compose up -d"
-fi 
+fi

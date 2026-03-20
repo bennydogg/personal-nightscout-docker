@@ -45,16 +45,14 @@ cd /opt/nightscout/alice && ./cleanup.sh
 ## Database
 
 ```bash
-# NOTE: mongo:4.4 uses the legacy 'mongo' shell, NOT mongosh
-
 # Test connectivity
-docker-compose exec mongo mongo --eval "db.adminCommand('ping')"
+docker-compose exec mongo mongosh --eval "db.adminCommand('ping')"
 
 # Database stats
-docker-compose exec mongo mongo --eval "db.stats()"
+docker-compose exec mongo mongosh --eval "db.stats()"
 
 # Server status
-docker-compose exec mongo mongo --eval "db.serverStatus()"
+docker-compose exec mongo mongosh --eval "db.serverStatus()"
 
 # Manual mongodump (with auth)
 docker-compose exec mongo mongodump \
@@ -120,6 +118,22 @@ for dir in /opt/nightscout/*/; do
   echo "=== Updating $(basename "$dir") ==="
   (cd "$dir" && docker-compose down && docker-compose pull && docker-compose up -d)
 done
+```
+
+## MongoDB Upgrade
+
+```bash
+# Preview upgrade plan
+./upgrade-mongodb.sh --dry-run
+
+# Upgrade to 7.0 (handles 4.4 → 5.0 → 6.0 → 7.0 stepping)
+./upgrade-mongodb.sh
+
+# Stop at an intermediate version
+./upgrade-mongodb.sh --target 5.0
+
+# Check current FCV after upgrade
+docker-compose exec mongo mongosh --eval "db.adminCommand({getParameter:1, featureCompatibilityVersion:1})"
 ```
 
 ## Resource Monitoring

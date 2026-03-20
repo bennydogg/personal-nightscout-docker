@@ -7,6 +7,9 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Load shared utilities (provides mongo_shell)
+source "$SCRIPT_DIR/lib/instance-utils.sh"
+
 echo "🔍 Nightscout Configuration Validation"
 echo "====================================="
 
@@ -145,8 +148,8 @@ if [ -n "$MONGO_CONTAINER" ]; then
     if [ -n "$MONGO_RUNNING" ]; then
         print_status "MongoDB container ($MONGO_NAME) is running"
 
-        # Test MongoDB connectivity (mongo:4.4 uses legacy 'mongo' shell, not 'mongosh')
-        if docker exec "$MONGO_CONTAINER" mongo --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+        # Test MongoDB connectivity
+        if mongo_shell "$MONGO_CONTAINER" --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
             print_status "MongoDB is responding to connections"
         else
             print_warning "MongoDB is not responding properly"
@@ -196,10 +199,12 @@ else
     echo "Images will be pulled when starting containers"
 fi
 
-if docker images | grep -q "mongo:4.4"; then
-    print_status "MongoDB Docker image is available"
+MONGO_VERSION=$(grep "^MONGO_VERSION=" .env 2>/dev/null | cut -d'=' -f2)
+MONGO_VERSION=${MONGO_VERSION:-7.0}
+if docker images | grep -q "mongo.*${MONGO_VERSION}"; then
+    print_status "MongoDB Docker image (${MONGO_VERSION}) is available"
 else
-    print_warning "MongoDB Docker image not found"
+    print_warning "MongoDB Docker image (${MONGO_VERSION}) not found"
     echo "Images will be pulled when starting containers"
 fi
 
@@ -217,11 +222,8 @@ echo "1. Start containers: docker-compose up -d"
 echo "2. Check logs: docker-compose logs -f"
 echo "3. Access Nightscout: http://localhost:${HOST_PORT}"
 
-# Show all instances if the utility is available
-if [ -f "$SCRIPT_DIR/lib/instance-utils.sh" ]; then
-    echo
-    echo "📊 All Instances"
-    echo "================"
-    source "$SCRIPT_DIR/lib/instance-utils.sh"
-    print_instance_table 2>/dev/null || true
-fi 
+# Show all instances
+echo
+echo "📊 All Instances"
+echo "================"
+print_instance_table 2>/dev/null || true 

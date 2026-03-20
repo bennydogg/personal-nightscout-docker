@@ -206,6 +206,39 @@ check_port_available() {
 # Reads ~/.cloudflared/config.yml and prints the ingress rules.
 # Returns 1 if no config found.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# mongo_shell CONTAINER [ARGS...]
+#
+# Executes the appropriate MongoDB shell (mongosh or legacy mongo) inside
+# a container. Auto-detects which is available so scripts work across
+# MongoDB 4.4 through 7.0.
+# ---------------------------------------------------------------------------
+mongo_shell() {
+    local container="$1"; shift
+    if docker exec "$container" mongosh --version >/dev/null 2>&1; then
+        docker exec "$container" mongosh "$@"
+    else
+        docker exec "$container" mongo "$@"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# mongo_shell_compose [ARGS...]
+#
+# Same as mongo_shell but resolves the container via docker-compose.
+# Must be called from a directory with docker-compose.yml.
+# ---------------------------------------------------------------------------
+mongo_shell_compose() {
+    local mongo_container
+    mongo_container=$(docker-compose ps -q mongo 2>/dev/null)
+    if [ -z "$mongo_container" ]; then
+        echo "MongoDB container not found" >&2
+        return 1
+    fi
+    mongo_shell "$mongo_container" "$@"
+}
+
+# ---------------------------------------------------------------------------
 get_cloudflare_ingress() {
     local config="${HOME}/.cloudflared/config.yml"
     if [ ! -f "$config" ]; then

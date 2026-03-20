@@ -233,6 +233,12 @@ CLOUDFLARE_TUNNEL_ID=
 # ADVANCED SETTINGS (Optional)
 # =============================================================================
 
+# Host port for this instance (unique per instance)
+HOST_PORT=8080
+
+# MongoDB version (4.4, 5.0, 6.0, or 7.0)
+MONGO_VERSION=7.0
+
 # Node environment
 NODE_ENV=production
 

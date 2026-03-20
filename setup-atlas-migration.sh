@@ -9,6 +9,11 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load shared utilities (provides mongo_shell)
+source "$SCRIPT_DIR/lib/instance-utils.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -59,7 +64,7 @@ validate_database_setup() {
     fi
     
     # Test database connectivity
-    if docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+    if mongo_shell_compose --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
         print_status "Database connectivity verified"
     else
         print_error "Database connectivity test failed"
@@ -67,7 +72,7 @@ validate_database_setup() {
     fi
     
     # Check if the target database exists and has data
-    local db_stats=$(docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.stats()" "$db_name" 2>/dev/null)
+    local db_stats=$(mongo_shell_compose --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.stats()" "$db_name" 2>/dev/null)
     if [ $? -eq 0 ] && echo "$db_stats" | grep -q '"objects" : [1-9]'; then
         print_status "Database '$db_name' exists and contains data"
         return 0
@@ -284,7 +289,7 @@ for i in {1..30}; do
     sleep 2
     print_info "Checking MongoDB... (attempt $i/30)"
     
-    if docker-compose exec -T mongo mongo --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+    if mongo_shell_compose --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
         print_status "MongoDB is ready"
         MONGO_READY=true
         break
@@ -323,7 +328,7 @@ for i in {1..30}; do
     sleep 2
     print_info "Checking MongoDB... (attempt $i/30)"
     
-    if docker-compose exec -T mongo mongo --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+    if mongo_shell_compose --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
         print_status "MongoDB is ready"
         MONGO_READY=true
         break
@@ -447,10 +452,10 @@ print_step "8" "Verification and cleanup"
 print_info "Verifying data migration..."
 
 # Test database connectivity
-if docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --eval "db.stats()" "$DATABASE_NAME" >/dev/null 2>&1; then
+if mongo_shell_compose --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --eval "db.stats()" "$DATABASE_NAME" >/dev/null 2>&1; then
     # Get collection counts
-    ENTRIES_COUNT=$(docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.entries.countDocuments()" "$DATABASE_NAME")
-    TREATMENTS_COUNT=$(docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.treatments.countDocuments()" "$DATABASE_NAME")
+    ENTRIES_COUNT=$(mongo_shell_compose --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.entries.countDocuments()" "$DATABASE_NAME")
+    TREATMENTS_COUNT=$(mongo_shell_compose --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.treatments.countDocuments()" "$DATABASE_NAME")
     
     print_status "Database verification:"
     print_info "  - Database: $DATABASE_NAME"

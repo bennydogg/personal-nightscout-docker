@@ -15,6 +15,9 @@ set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Load shared utilities (provides mongo_shell)
+source "$SCRIPT_DIR/lib/instance-utils.sh"
+
 # Configuration
 BACKUP_DIR="${SCRIPT_DIR}/backups"
 RETENTION_DAYS=7
@@ -123,8 +126,8 @@ if [ "$AVAILABLE_KB" -lt 1048576 ] 2>/dev/null; then
     fi
 fi
 
-# Test MongoDB connectivity (using legacy mongo shell for 4.4)
-if ! docker exec "$MONGO_CONTAINER" mongo \
+# Test MongoDB connectivity
+if ! mongo_shell "$MONGO_CONTAINER" \
     --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin \
     --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
     print_error "Cannot connect to MongoDB (auth failed or container unhealthy)"

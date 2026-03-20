@@ -70,7 +70,7 @@ services:
       - nightscout_network
 
   mongo:
-    image: mongo:4.4
+    image: mongo:${MONGO_VERSION:-7.0}
     restart: unless-stopped
     command: mongod --wiredTigerCacheSizeGB ${MONGO_CACHE_SIZE_GB:-0.25}
     volumes:

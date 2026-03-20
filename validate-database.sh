@@ -5,6 +5,11 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load shared utilities (provides mongo_shell)
+source "$SCRIPT_DIR/lib/instance-utils.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -57,7 +62,8 @@ fi
 print_info "Database name: $DB_NAME"
 
 # Check if containers are running
-if ! docker-compose ps | grep -q "nightscout_mongo.*Up"; then
+MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null)
+if [ -z "$MONGO_CONTAINER" ] || ! docker ps -q --filter "id=$MONGO_CONTAINER" 2>/dev/null | grep -q .; then
     print_error "MongoDB container is not running"
     print_info "Start containers with: docker-compose up -d"
     exit 1
@@ -65,8 +71,8 @@ fi
 
 print_status "MongoDB container is running"
 
-# Get MongoDB password
-MONGO_PASSWORD=$(grep "MONGO_INITDB_ROOT_PASSWORD=" .env | cut -d'=' -f2)
+# Get MongoDB password (handle passwords containing '=')
+MONGO_PASSWORD=$(grep "^MONGO_INITDB_ROOT_PASSWORD=" .env | sed 's/^MONGO_INITDB_ROOT_PASSWORD=//')
 if [ -z "$MONGO_PASSWORD" ]; then
     print_error "MongoDB password not found in .env file"
     exit 1
@@ -74,7 +80,7 @@ fi
 
 # Test database connectivity
 print_info "Testing database connectivity..."
-if docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+if mongo_shell "$MONGO_CONTAINER" --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
     print_status "Database connectivity verified"
 else
     print_error "Database connectivity test failed"
@@ -83,7 +89,7 @@ fi
 
 # Check if the target database exists
 print_info "Checking if database '$DB_NAME' exists..."
-DB_STATS=$(docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.stats()" "$DB_NAME" 2>/dev/null)
+DB_STATS=$(mongo_shell "$MONGO_CONTAINER" --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.stats()" "$DB_NAME" 2>/dev/null)
 
 if [ $? -eq 0 ]; then
     print_status "Database '$DB_NAME' exists"
@@ -97,7 +103,7 @@ if [ $? -eq 0 ]; then
     fi
     
     # List collections
-    COLLECTIONS=$(docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.getCollectionNames()" "$DB_NAME" 2>/dev/null)
+    COLLECTIONS=$(mongo_shell "$MONGO_CONTAINER" --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "db.getCollectionNames()" "$DB_NAME" 2>/dev/null)
     if [ -n "$COLLECTIONS" ]; then
         print_info "Collections found:"
         echo "$COLLECTIONS" | tr ',' '\n' | sed 's/\[//;s/\]//' | grep -v '^$' | while read -r collection; do
@@ -111,16 +117,19 @@ if [ $? -eq 0 ]; then
 else
     print_error "Database '$DB_NAME' does not exist"
     print_info "Available databases:"
-    docker-compose exec -T mongo mongo --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "show dbs" 2>/dev/null | grep -v "admin\|local" || true
+    mongo_shell "$MONGO_CONTAINER" --username root --password "$MONGO_PASSWORD" --authenticationDatabase admin --quiet --eval "show dbs" 2>/dev/null | grep -v "admin\|local" || true
 fi
 
 # Check Nightscout connection
+HOST_PORT=$(grep "^HOST_PORT=" .env 2>/dev/null | cut -d'=' -f2)
+HOST_PORT=${HOST_PORT:-8080}
+
 print_info "Checking Nightscout connection..."
-if curl -s -f "http://localhost:8080/api/v1/status" >/dev/null 2>&1; then
+if curl -s -f "http://localhost:${HOST_PORT}/api/v1/status" >/dev/null 2>&1; then
     print_status "Nightscout is accessible"
-    
+
     # Check if Nightscout can see data
-    ENTRIES_RESPONSE=$(curl -s "http://localhost:8080/api/v1/entries.json?count=1" 2>/dev/null)
+    ENTRIES_RESPONSE=$(curl -s "http://localhost:${HOST_PORT}/api/v1/entries.json?count=1" 2>/dev/null)
     if echo "$ENTRIES_RESPONSE" | grep -q "\["; then
         ENTRIES_COUNT=$(echo "$ENTRIES_RESPONSE" | jq 'length' 2>/dev/null || echo "0")
         if [ "$ENTRIES_COUNT" -gt 0 ]; then
@@ -140,8 +149,6 @@ echo "📋 Summary:"
 echo "==========="
 echo "Connection string: $CONNECTION_STRING"
 echo "Database name: $DB_NAME"
-echo "MongoDB container: $(docker-compose ps | grep nightscout_mongo | awk '{print $6}')"
-echo "Nightscout container: $(docker-compose ps | grep nightscout | awk '{print $6}')"
 
 echo ""
 print_info "If you see database naming issues:"

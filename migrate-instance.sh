@@ -144,7 +144,7 @@ mkdir -p "$INSTANCE_DIR"
 # Copy project files (not .env, not .git)
 for f in docker-compose.yml Dockerfile .env.example setup.sh setup-cloudflare.sh \
          validate.sh validate-database.sh diagnose.sh debug-tunnel.sh fix-tunnel.sh \
-         cleanup.sh cleanup-tunnels.sh backup.sh; do
+         cleanup.sh cleanup-tunnels.sh backup.sh upgrade-mongodb.sh; do
     if [ -f "$SCRIPT_DIR/$f" ]; then
         cp "$SCRIPT_DIR/$f" "$INSTANCE_DIR/"
     fi
@@ -184,6 +184,7 @@ cat > .env << ENVEOF
 
 # Instance settings
 HOST_PORT=$HOST_PORT
+MONGO_VERSION=7.0
 MONGO_CACHE_SIZE_GB=0.25
 
 # Security
@@ -246,7 +247,7 @@ print_status "Instance started"
 print_info "Waiting for MongoDB to be ready..."
 for i in {1..30}; do
     MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null)
-    if [ -n "$MONGO_CONTAINER" ] && docker exec "$MONGO_CONTAINER" mongo --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+    if [ -n "$MONGO_CONTAINER" ] && mongo_shell "$MONGO_CONTAINER" --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
         print_status "MongoDB is ready"
         break
     fi

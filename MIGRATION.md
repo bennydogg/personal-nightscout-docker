@@ -1,6 +1,8 @@
 # Nightscout MongoDB Migration Guide
 
-This guide helps you migrate your Nightscout database from MongoDB Atlas to a self-hosted MongoDB instance. Based on official Nightscout documentation and MongoDB best practices.
+This guide covers migrating from **MongoDB Atlas to self-hosted MongoDB**.
+
+For migrating between instances on your server (or creating new instances from existing ones), use `migrate-instance.sh` instead — see README.md.
 
 ## Prerequisites
 

@@ -22,15 +22,15 @@ openssl rand -base64 24
 
 ### Network Security
 
-**Firewall Configuration:**
-- Only expose port 1337 if external access needed
-- Use reverse proxy with SSL/TLS for production
-- Consider VPN access for sensitive deployments
+**Port Binding:**
+- Port binds to `127.0.0.1` only (not publicly accessible)
+- External access is via Cloudflare Tunnel exclusively
+- Each instance uses a unique `HOST_PORT` configured in `.env`
 
 **Docker Network Isolation:**
-- Use custom networks (already configured)
+- Use custom bridge networks (configured per compose project)
 - Avoid host networking mode
-- Limit container capabilities
+- Containers run with `no-new-privileges` and `cap_drop: ALL`
 
 ### Data Protection
 

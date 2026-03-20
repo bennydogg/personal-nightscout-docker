@@ -5,6 +5,8 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "🔍 Nightscout Configuration Validation"
 echo "====================================="
 
@@ -107,35 +109,52 @@ fi
 # Check if containers are running
 print_info "Checking container status..."
 
-NIGHTSCOUT_RUNNING=$(docker ps --format "{{.Names}}" | grep "^nightscout$" || echo "")
-if [ -n "$NIGHTSCOUT_RUNNING" ]; then
-    print_status "Nightscout container is running"
-    
-    # Check health status
-    HEALTH_STATUS=$(docker inspect nightscout --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-    if [ "$HEALTH_STATUS" = "healthy" ]; then
-        print_status "Nightscout container is healthy"
-    elif [ "$HEALTH_STATUS" = "unhealthy" ]; then
-        print_error "Nightscout container is unhealthy"
-        print_info "Check logs: docker logs nightscout"
+# Detect container names from compose project (handles multi-instance)
+COMPOSE_PROJECT=$(basename "$(pwd)")
+NS_CONTAINER=$(docker-compose ps -q nightscout 2>/dev/null || echo "")
+MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null || echo "")
+
+if [ -n "$NS_CONTAINER" ]; then
+    NS_NAME=$(docker inspect --format='{{.Name}}' "$NS_CONTAINER" 2>/dev/null | sed 's/^\///')
+    NS_RUNNING=$(docker ps -q --filter "id=$NS_CONTAINER" 2>/dev/null)
+    if [ -n "$NS_RUNNING" ]; then
+        print_status "Nightscout container ($NS_NAME) is running"
+
+        # Check health status
+        HEALTH_STATUS=$(docker inspect "$NS_CONTAINER" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        if [ "$HEALTH_STATUS" = "healthy" ]; then
+            print_status "Nightscout container is healthy"
+        elif [ "$HEALTH_STATUS" = "unhealthy" ]; then
+            print_error "Nightscout container is unhealthy"
+            print_info "Check logs: docker-compose logs nightscout"
+        else
+            print_warning "Nightscout health status: $HEALTH_STATUS"
+        fi
     else
-        print_warning "Nightscout health status: $HEALTH_STATUS"
+        print_warning "Nightscout container exists but is not running"
+        echo "Start containers with: docker-compose up -d"
     fi
 else
     print_warning "Nightscout container is not running"
     echo "Start containers with: docker-compose up -d"
 fi
 
-MONGO_RUNNING=$(docker ps --format "{{.Names}}" | grep "^nightscout_mongo$" || echo "")
-if [ -n "$MONGO_RUNNING" ]; then
-    print_status "MongoDB container is running"
-    
-    # Test MongoDB connectivity
-    if docker exec nightscout_mongo mongosh --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
-        print_status "MongoDB is responding to connections"
+if [ -n "$MONGO_CONTAINER" ]; then
+    MONGO_NAME=$(docker inspect --format='{{.Name}}' "$MONGO_CONTAINER" 2>/dev/null | sed 's/^\///')
+    MONGO_RUNNING=$(docker ps -q --filter "id=$MONGO_CONTAINER" 2>/dev/null)
+    if [ -n "$MONGO_RUNNING" ]; then
+        print_status "MongoDB container ($MONGO_NAME) is running"
+
+        # Test MongoDB connectivity (mongo:4.4 uses legacy 'mongo' shell, not 'mongosh')
+        if docker exec "$MONGO_CONTAINER" mongo --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+            print_status "MongoDB is responding to connections"
+        else
+            print_warning "MongoDB is not responding properly"
+            print_info "Check logs: docker-compose logs mongo"
+        fi
     else
-        print_warning "MongoDB is not responding properly"
-        print_info "Check logs: docker logs nightscout_mongo"
+        print_warning "MongoDB container exists but is not running"
+        echo "Start containers with: docker-compose up -d"
     fi
 else
     print_warning "MongoDB container is not running"
@@ -145,11 +164,14 @@ fi
 # Check port availability
 print_info "Checking port availability..."
 
-if netstat -an 2>/dev/null | grep -q ":1337 "; then
-    print_warning "Port 1337 is already in use"
-    echo "Make sure no other service is using port 1337"
+# Check the configured host port (from .env or default 8080)
+HOST_PORT=$(grep "^HOST_PORT=" .env 2>/dev/null | cut -d'=' -f2)
+HOST_PORT=${HOST_PORT:-8080}
+
+if netstat -an 2>/dev/null | grep -q ":${HOST_PORT} " || ss -tln 2>/dev/null | grep -q ":${HOST_PORT} "; then
+    print_warning "Port $HOST_PORT is in use (expected if Nightscout is already running)"
 else
-    print_status "Port 1337 is available"
+    print_status "Port $HOST_PORT is available"
 fi
 
 # Check disk space
@@ -186,19 +208,20 @@ echo
 echo "📊 Validation Summary"
 echo "===================="
 
-if [ $? -eq 0 ]; then
-    print_status "Configuration validation completed"
-    echo
-    echo "🎉 Your Nightscout setup appears to be ready!"
-    echo
-    echo "Next steps:"
-    echo "1. Start containers: docker-compose up -d"
-    echo "2. Check logs: docker-compose logs -f"
-    echo "3. Access Nightscout: http://localhost:1337"
-    echo
+print_status "Configuration validation completed"
+echo
+echo "🎉 Your Nightscout setup appears to be ready!"
+echo
+echo "Next steps:"
+echo "1. Start containers: docker-compose up -d"
+echo "2. Check logs: docker-compose logs -f"
+echo "3. Access Nightscout: http://localhost:${HOST_PORT}"
 
-else
-    print_error "Configuration validation failed"
-    echo "Please fix the issues above and run validation again."
-    exit 1
+# Show all instances if the utility is available
+if [ -f "$SCRIPT_DIR/lib/instance-utils.sh" ]; then
+    echo
+    echo "📊 All Instances"
+    echo "================"
+    source "$SCRIPT_DIR/lib/instance-utils.sh"
+    print_instance_table 2>/dev/null || true
 fi 

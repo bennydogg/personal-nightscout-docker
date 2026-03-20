@@ -41,25 +41,40 @@ print_warning "⚠️  WARNING: This will permanently delete tunnels!"
 echo "Make sure you know which tunnels you want to keep."
 echo
 
+# Detect active tunnel name from .env if available
+ACTIVE_TUNNEL=""
+if [ -f ".env" ]; then
+    ACTIVE_TUNNEL=$(grep "^TUNNEL_NAME=" .env 2>/dev/null | cut -d'=' -f2)
+fi
+
 # Ask which tunnels to delete
-read -p "Enter tunnel names to delete (space-separated, or 'all' for all except nightscout-ben): " TUNNELS_TO_DELETE
+if [ -n "$ACTIVE_TUNNEL" ]; then
+    read -p "Enter tunnel names to delete (space-separated, or 'all' for all except '$ACTIVE_TUNNEL'): " TUNNELS_TO_DELETE
+else
+    read -p "Enter tunnel names to delete (space-separated, or 'all' for all): " TUNNELS_TO_DELETE
+fi
 
 if [ "$TUNNELS_TO_DELETE" = "all" ]; then
-    print_info "Deleting all tunnels except 'ns-tunnel-ben'..."
-    
-    # Get list of tunnels to delete (all except ns-tunnel-ben)
+    EXCLUDE_NAME="${ACTIVE_TUNNEL}"
+    if [ -n "$EXCLUDE_NAME" ]; then
+        print_info "Deleting all tunnels except '$EXCLUDE_NAME'..."
+    else
+        print_info "Deleting all tunnels..."
+    fi
+
     TUNNELS_TO_DELETE=$(cloudflared tunnel list -o json | python3 -c "
 import json, sys
 try:
+    exclude = '$EXCLUDE_NAME'
     data = json.load(sys.stdin)
-    names = [tunnel['name'] for tunnel in data if tunnel.get('name') != 'ns-tunnel-ben']
+    names = [tunnel['name'] for tunnel in data if not exclude or tunnel.get('name') != exclude]
     print(' '.join(names))
 except:
     sys.exit(1)
 " 2>/dev/null)
-    
+
     if [ -z "$TUNNELS_TO_DELETE" ]; then
-        print_info "No tunnels to delete (only ns-tunnel-ben exists)"
+        print_info "No tunnels to delete"
         exit 0
     fi
 fi

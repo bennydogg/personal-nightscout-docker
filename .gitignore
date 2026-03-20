@@ -38,5 +38,3 @@ Thumbs.db
 *.tar
 *.zip
 
-# Docker
-.dockerignore 

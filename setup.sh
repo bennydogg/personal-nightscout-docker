@@ -259,15 +259,14 @@ print_status "Generated secure API_SECRET and MongoDB password"
 
 # Update MongoDB connection string with URL-encoded password
 MONGO_PASSWORD_ENCODED=$(echo "$MONGO_PASSWORD" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')
-sed -i.bak "s|MONGO_CONNECTION=.*|MONGO_CONNECTION=mongodb://root:$MONGO_PASSWORD_ENCODED@mongo:27017/heroku_qqh7g5gj?authSource=admin|" .env
+sed -i.bak "s|MONGO_CONNECTION=.*|MONGO_CONNECTION=mongodb://root:$MONGO_PASSWORD_ENCODED@mongo:27017/nightscout?authSource=admin|" .env
 
 print_status "Updated MongoDB connection string"
 
 # Configure timezone
 print_info "Setting timezone..."
-# Use default timezone (America/Chicago)
-sed -i.bak "s|TZ=.*|TZ=America/Chicago|" .env
-print_status "Set timezone to America/Chicago"
+sed -i.bak "s|TZ=.*|TZ=America/New_York|" .env
+print_status "Set timezone to America/New_York"
 
 # Configure display units
 print_info "Setting display units..."
@@ -306,8 +305,9 @@ if [ -n "$DOMAIN" ]; then
     print_status "Set tunnel name to $TUNNEL_NAME"
 fi
 
-# Clean up backup files
+# Clean up backup files and secure .env
 rm -f .env.bak
+chmod 600 .env
 
 # Validate configuration
 print_info "Validating configuration..."
@@ -403,9 +403,7 @@ if [ "$SETUP_TUNNEL" = true ]; then
         
         # Step 3: Setup Cloudflare tunnel
         print_info "Step 3: Setting up Cloudflare tunnel..."
-        ./setup-cloudflare.sh --domain "$DOMAIN" --tunnel-name "$TUNNEL_NAME" --non-interactive
-        
-        if [ $? -eq 0 ]; then
+        if ./setup-cloudflare.sh --domain "$DOMAIN" --tunnel-name "$TUNNEL_NAME" --non-interactive; then
             print_status "Cloudflare tunnel setup completed successfully!"
             echo
             echo "🎉 Full automated setup completed!"
@@ -438,61 +436,6 @@ else
         echo "2. Start Nightscout: docker-compose up -d"
         echo "3. Verify it's running: curl http://localhost:8080/api/v1/status"
         echo "4. For Cloudflare tunnel: ./setup-cloudflare.sh"
-        echo
-        
-        # Offer to start Nightscout and setup tunnel interactively
-        if [ -n "$DOMAIN" ] && [ "$INTERACTIVE" = true ]; then
-            echo "Would you like to start Nightscout now and setup the Cloudflare tunnel?"
-            read -p "Start deployment? (Y/n): " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                echo
-                print_info "🚀 Starting interactive deployment..."
-                
-                # Step 1: Start Docker
-                print_info "Step 1: Starting Nightscout with Docker Compose..."
-                if docker-compose up -d; then
-                    print_status "Docker Compose started successfully"
-                else
-                    print_error "Failed to start Docker Compose"
-                    print_info "Please check for port conflicts: docker-compose logs"
-                    exit 1
-                fi
-                
-                # Step 2: Wait and verify
-                print_info "Step 2: Waiting for Nightscout to be ready..."
-                NIGHTSCOUT_READY=false
-                
-                for i in {1..24}; do
-                    sleep 5
-                    print_info "Checking Nightscout health... (attempt $i/24)"
-                    
-                    if curl -s -f "http://localhost:8080/api/v1/status" > /dev/null 2>&1; then
-                        print_status "✅ Nightscout is ready and accessible!"
-                        NIGHTSCOUT_READY=true
-                        break
-                    elif [ $i -eq 24 ]; then
-                        print_error "Nightscout failed to become ready after 2 minutes"
-                        print_info "Check logs: docker-compose logs nightscout"
-                        exit 1
-                    fi
-                done
-                
-                if [ "$NIGHTSCOUT_READY" = true ]; then
-                    echo
-                    print_status "🌐 Nightscout is running at: http://localhost:8080"
-                    echo
-                    read -p "Proceed with Cloudflare tunnel setup? (Y/n): " -n 1 -r
-                    echo
-                    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                        print_info "Step 3: Setting up Cloudflare tunnel..."
-                        ./setup-cloudflare.sh --domain "$DOMAIN" --tunnel-name "$TUNNEL_NAME"
-                    else
-                        print_info "Cloudflare setup skipped. Run manually: ./setup-cloudflare.sh"
-                    fi
-                fi
-            fi
-        fi
     fi
     echo
     echo "⚠️  Security notes:"

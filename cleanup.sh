@@ -5,6 +5,8 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "🧹 Nightscout Cleanup Script"
 echo "============================"
 
@@ -32,56 +34,40 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
-# Confirm cleanup
-print_warning "This will remove ALL Nightscout containers, volumes, and data!"
-print_warning "This action cannot be undone!"
-read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+# Detect what this compose project manages
+COMPOSE_PROJECT=$(basename "$(pwd)")
+print_info "Compose project: $COMPOSE_PROJECT"
 echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+
+# Show all instances for context so you know what you're cleaning up
+if [ -f "$SCRIPT_DIR/lib/instance-utils.sh" ]; then
+    source "$SCRIPT_DIR/lib/instance-utils.sh"
+    echo "All known instances:"
+    print_instance_table 2>/dev/null || true
+    echo
+fi
+
+# Confirm cleanup
+print_warning "This will remove containers, volumes, and data for THIS instance only."
+print_warning "Project directory: $(pwd)"
+print_warning "This action DESTROYS ALL CGM DATA for this instance and cannot be undone!"
+echo
+read -p "Type 'yes' to confirm cleanup: " CONFIRM
+if [ "$CONFIRM" != "yes" ]; then
     echo "Cleanup cancelled."
     exit 1
 fi
 
-# Stop and remove containers
-print_info "Stopping and removing containers..."
-if docker ps -a --format "table {{.Names}}" | grep -q "nightscout"; then
+# Stop and remove containers and volumes via compose (scoped to this project)
+print_info "Stopping and removing containers and volumes..."
+if docker-compose ps -q 2>/dev/null | head -1 | grep -q .; then
     docker-compose down -v
-    print_status "Containers stopped and removed"
+    print_status "Containers and volumes removed"
 else
-    print_info "No Nightscout containers found"
+    print_info "No running containers found for this project"
+    # Still run down -v to clean up stopped containers/volumes
+    docker-compose down -v 2>/dev/null || true
 fi
-
-# Remove volumes
-print_info "Removing volumes..."
-if docker volume ls --format "table {{.Name}}" | grep -q "nightscout"; then
-    docker volume rm $(docker volume ls -q | grep nightscout) 2>/dev/null || true
-    print_status "Volumes removed"
-else
-    print_info "No Nightscout volumes found"
-fi
-
-# Remove networks
-print_info "Removing networks..."
-if docker network ls --format "table {{.Name}}" | grep -q "nightscout"; then
-    docker network rm $(docker network ls -q | grep nightscout) 2>/dev/null || true
-    print_status "Networks removed"
-else
-    print_info "No Nightscout networks found"
-fi
-
-# Remove images
-print_info "Removing images..."
-if docker images --format "table {{.Repository}}" | grep -q "nightscout"; then
-    docker rmi $(docker images -q | grep nightscout) 2>/dev/null || true
-    print_status "Images removed"
-else
-    print_info "No Nightscout images found"
-fi
-
-# Clean up any dangling resources
-print_info "Cleaning up dangling resources..."
-docker system prune -f
-print_status "Dangling resources cleaned"
 
 # Remove configuration files
 print_info "Removing configuration files..."

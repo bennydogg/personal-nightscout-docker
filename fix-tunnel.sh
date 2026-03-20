@@ -50,10 +50,24 @@ fi
 print_info "Existing tunnels:"
 cloudflared tunnel list
 
+# Detect tunnel name from .env if available
+DEFAULT_TUNNEL=""
+if [ -f ".env" ]; then
+    DEFAULT_TUNNEL=$(grep "^TUNNEL_NAME=" .env 2>/dev/null | cut -d'=' -f2)
+fi
+
 # Ask which tunnel to use
 echo
-read -p "Enter the tunnel name to use (or press Enter for 'ns-tunnel-ben'): " TUNNEL_NAME
-TUNNEL_NAME=${TUNNEL_NAME:-ns-tunnel-ben}
+if [ -n "$DEFAULT_TUNNEL" ]; then
+    read -p "Enter the tunnel name to use (or press Enter for '$DEFAULT_TUNNEL'): " TUNNEL_NAME
+    TUNNEL_NAME=${TUNNEL_NAME:-$DEFAULT_TUNNEL}
+else
+    read -p "Enter the tunnel name to use: " TUNNEL_NAME
+    if [ -z "$TUNNEL_NAME" ]; then
+        print_error "Tunnel name is required"
+        exit 1
+    fi
+fi
 
 print_info "Using tunnel: $TUNNEL_NAME"
 
@@ -107,9 +121,9 @@ echo "- Domain: $DOMAIN"
 echo "- Service Status: $(sudo systemctl is-active cloudflared)"
 echo
 echo "🔧 Management Commands:"
-echo "- Check status: ./tunnel-status.sh"
-echo "- View logs: ./tunnel-logs.sh"
-echo "- Restart tunnel: ./tunnel-restart.sh"
+echo "- Check status: sudo systemctl status cloudflared"
+echo "- View logs: sudo journalctl -u cloudflared -f"
+echo "- Restart tunnel: sudo systemctl restart cloudflared"
 echo
 echo "🌐 Your Nightscout will be available at:"
 echo "   https://$DOMAIN"

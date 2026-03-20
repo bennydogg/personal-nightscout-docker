@@ -219,12 +219,29 @@ fi
 print_info "Creating tunnel..."
 if [ -z "$TUNNEL_NAME" ]; then
     if [ "$NON_INTERACTIVE" = true ]; then
-        TUNNEL_NAME="ns-tunnel-ben"
-        print_info "Using default tunnel name: $TUNNEL_NAME"
+        if [ -n "$DOMAIN" ]; then
+            HOSTNAME_PART=$(echo "$DOMAIN" | cut -d'.' -f1)
+            TUNNEL_NAME="${HOSTNAME_PART}-tunnel"
+        else
+            print_error "Tunnel name is required in non-interactive mode. Use --tunnel-name flag."
+            exit 1
+        fi
+        print_info "Using tunnel name: $TUNNEL_NAME"
     else
-        read -p "Enter a name for your tunnel (e.g., ns-tunnel-ben): " TUNNEL_NAME
-        if [ -z "$TUNNEL_NAME" ]; then
-            TUNNEL_NAME="ns-tunnel-ben"
+        DEFAULT_SUGGESTION=""
+        if [ -n "$DOMAIN" ]; then
+            HOSTNAME_PART=$(echo "$DOMAIN" | cut -d'.' -f1)
+            DEFAULT_SUGGESTION="${HOSTNAME_PART}-tunnel"
+        fi
+        if [ -n "$DEFAULT_SUGGESTION" ]; then
+            read -p "Enter a name for your tunnel (default: $DEFAULT_SUGGESTION): " TUNNEL_NAME
+            TUNNEL_NAME=${TUNNEL_NAME:-$DEFAULT_SUGGESTION}
+        else
+            read -p "Enter a name for your tunnel: " TUNNEL_NAME
+            if [ -z "$TUNNEL_NAME" ]; then
+                print_error "Tunnel name is required"
+                exit 1
+            fi
         fi
     fi
 else

@@ -150,6 +150,13 @@ for f in docker-compose.yml Dockerfile .env.example setup.sh setup-cloudflare.sh
     fi
 done
 
+# Copy directories
+for d in mongo-init lib; do
+    if [ -d "$SCRIPT_DIR/$d" ]; then
+        cp -r "$SCRIPT_DIR/$d" "$INSTANCE_DIR/"
+    fi
+done
+
 # Copy this script too for future use
 cp "$SCRIPT_DIR/migrate-instance.sh" "$INSTANCE_DIR/" 2>/dev/null || true
 
@@ -164,8 +171,9 @@ cd "$INSTANCE_DIR"
 
 # Generate secrets
 API_SECRET=$(openssl rand -base64 32)
-MONGO_PASSWORD=$(openssl rand -base64 24)
-MONGO_PASSWORD_ENCODED=$(echo "$MONGO_PASSWORD" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')
+MONGO_ROOT_PASSWORD=$(openssl rand -base64 24)
+MONGO_APP_PASSWORD=$(openssl rand -base64 24)
+MONGO_APP_PASSWORD_ENCODED=$(echo "$MONGO_APP_PASSWORD" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')
 
 HOSTNAME_PART=$(echo "$DOMAIN" | cut -d'.' -f1)
 CUSTOM_TITLE="${HOSTNAME_PART^} Nightscout"
@@ -180,10 +188,14 @@ MONGO_CACHE_SIZE_GB=0.25
 
 # Security
 API_SECRET=$API_SECRET
-MONGO_INITDB_ROOT_PASSWORD=$MONGO_PASSWORD
+MONGO_INITDB_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD
 
-# MongoDB
-MONGO_CONNECTION=mongodb://root:${MONGO_PASSWORD_ENCODED}@mongo:27017/nightscout?authSource=admin
+# MongoDB application user (Nightscout connects with this, not root)
+MONGO_APP_USERNAME=nightscout
+MONGO_APP_PASSWORD=$MONGO_APP_PASSWORD
+
+# MongoDB connection (uses app user)
+MONGO_CONNECTION=mongodb://nightscout:${MONGO_APP_PASSWORD_ENCODED}@mongo:27017/nightscout?authSource=nightscout
 MONGO_COLLECTION=entries
 
 # Core settings

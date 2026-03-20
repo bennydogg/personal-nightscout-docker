@@ -1,6 +1,6 @@
 services:
   nightscout:
-    image: nightscout/cgm-remote-monitor:15.0.3
+    image: nightscout/cgm-remote-monitor:15.0.6
     restart: unless-stopped
     depends_on:
       - mongo
@@ -75,10 +75,14 @@ services:
     command: mongod --wiredTigerCacheSizeGB ${MONGO_CACHE_SIZE_GB:-0.25}
     volumes:
       - nightscout_mongo_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
       - /etc/localtime:/etc/localtime:ro
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME:-nightscout}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}
+      MONGO_APP_DATABASE: nightscout
     networks:
       - nightscout_network
     security_opt:

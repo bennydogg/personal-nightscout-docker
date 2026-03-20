@@ -155,11 +155,15 @@ cat > .env << 'EOF'
 # API Secret - Used for API authentication (minimum 12 characters)
 API_SECRET=change_this_to_a_long_random_string
 
-# MongoDB Root Password (minimum 8 characters)
+# MongoDB Root Password (admin only — not used by Nightscout)
 MONGO_INITDB_ROOT_PASSWORD=change_this_password
 
-# MongoDB Connection String (auto-generated from password above)
-MONGO_CONNECTION=mongodb://root:change_this_password@mongo:27017/nightscout?authSource=admin
+# MongoDB Application User (Nightscout connects with this, not root)
+MONGO_APP_USERNAME=nightscout
+MONGO_APP_PASSWORD=change_this_app_password
+
+# MongoDB Connection String (uses app user)
+MONGO_CONNECTION=mongodb://nightscout:change_this_app_password@mongo:27017/nightscout?authSource=nightscout
 
 # =============================================================================
 # BASIC CONFIGURATION
@@ -251,17 +255,21 @@ print_info "Generating secure secrets..."
 API_SECRET=$(openssl rand -base64 32)
 sed -i.bak "s|API_SECRET=.*|API_SECRET=$API_SECRET|" .env
 
-# Generate MongoDB password
-MONGO_PASSWORD=$(openssl rand -base64 24)
-sed -i.bak "s|MONGO_INITDB_ROOT_PASSWORD=.*|MONGO_INITDB_ROOT_PASSWORD=$MONGO_PASSWORD|" .env
+# Generate MongoDB root password
+MONGO_ROOT_PASSWORD=$(openssl rand -base64 24)
+sed -i.bak "s|MONGO_INITDB_ROOT_PASSWORD=.*|MONGO_INITDB_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD|" .env
 
-print_status "Generated secure API_SECRET and MongoDB password"
+# Generate MongoDB app user password (separate from root)
+MONGO_APP_PASSWORD=$(openssl rand -base64 24)
+sed -i.bak "s|MONGO_APP_PASSWORD=.*|MONGO_APP_PASSWORD=$MONGO_APP_PASSWORD|" .env
 
-# Update MongoDB connection string with URL-encoded password
-MONGO_PASSWORD_ENCODED=$(echo "$MONGO_PASSWORD" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')
-sed -i.bak "s|MONGO_CONNECTION=.*|MONGO_CONNECTION=mongodb://root:$MONGO_PASSWORD_ENCODED@mongo:27017/nightscout?authSource=admin|" .env
+print_status "Generated secure API_SECRET and MongoDB passwords"
 
-print_status "Updated MongoDB connection string"
+# Update MongoDB connection string with URL-encoded app password
+MONGO_APP_PASSWORD_ENCODED=$(echo "$MONGO_APP_PASSWORD" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')
+sed -i.bak "s|MONGO_CONNECTION=.*|MONGO_CONNECTION=mongodb://nightscout:$MONGO_APP_PASSWORD_ENCODED@mongo:27017/nightscout?authSource=nightscout|" .env
+
+print_status "Updated MongoDB connection string (using app user, not root)"
 
 # Configure timezone
 print_info "Setting timezone..."

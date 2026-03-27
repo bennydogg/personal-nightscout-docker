@@ -5,6 +5,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/instance-utils.sh"
+
 # Configuration
 SOURCE_TYPE="atlas"
 TARGET_TYPE="local"
@@ -195,7 +198,7 @@ if [ "$TARGET_TYPE" = "local" ]; then
         exit 1
     fi
     
-    if ! docker-compose ps | grep -q "Up"; then
+    if ! docker_compose ps | grep -q "Up"; then
         add_warning "Nightscout containers are not running"
     fi
 fi
@@ -384,7 +387,7 @@ print_info "Step 6: Nightscout-specific validation"
 
 if [ "$TARGET_TYPE" = "local" ]; then
     # Check if Nightscout is running
-    if docker-compose ps | grep -q "nightscout.*Up"; then
+    if docker_compose ps | grep -q "nightscout.*Up"; then
         add_success "Nightscout container is running"
         
         # Test Nightscout API

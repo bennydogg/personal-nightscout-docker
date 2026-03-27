@@ -37,6 +37,12 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+VALIDATION_FAILED=0
+fail_validation() {
+    VALIDATION_FAILED=1
+    print_error "$1"
+}
+
 # Check if .env file exists
 if [ ! -f ".env" ]; then
     print_error ".env file not found!"
@@ -53,31 +59,31 @@ REQUIRED_VARS=("API_SECRET" "MONGO_INITDB_ROOT_PASSWORD" "MONGO_CONNECTION" "TZ"
 
 for var in "${REQUIRED_VARS[@]}"; do
     if grep -q "^${var}=" .env; then
-        value=$(grep "^${var}=" .env | cut -d'=' -f2)
+        value=$(env_var_value "$var" .env)
         if [[ "$value" == *"change_this"* ]]; then
-            print_error "$var still has default value"
+            fail_validation "$var still has default value"
         else
             print_status "$var is configured"
         fi
     else
-        print_error "$var is missing"
+        fail_validation "$var is missing"
     fi
 done
 
-# Check API_SECRET length
-API_SECRET=$(grep "^API_SECRET=" .env | cut -d'=' -f2)
+# Check API_SECRET length (handles '=' in secret)
+API_SECRET=$(env_var_value API_SECRET .env)
 if [ ${#API_SECRET} -lt 12 ]; then
-    print_error "API_SECRET is too short (minimum 12 characters, current: ${#API_SECRET})"
+    fail_validation "API_SECRET is too short (minimum 12 characters, current: ${#API_SECRET})"
 else
     print_status "API_SECRET length is adequate (${#API_SECRET} characters)"
 fi
 
 # Check MongoDB password
-MONGO_PASSWORD=$(grep "^MONGO_INITDB_ROOT_PASSWORD=" .env | cut -d'=' -f2)
-if [ ${#MONGO_PASSWORD} -lt 8 ]; then
-    print_error "MONGO_INITDB_ROOT_PASSWORD is too short (minimum 8 characters, current: ${#MONGO_PASSWORD})"
+MONGO_ROOT_PW=$(env_var_value MONGO_INITDB_ROOT_PASSWORD .env)
+if [ ${#MONGO_ROOT_PW} -lt 8 ]; then
+    fail_validation "MONGO_INITDB_ROOT_PASSWORD is too short (minimum 8 characters, current: ${#MONGO_ROOT_PW})"
 else
-    print_status "MONGO_INITDB_ROOT_PASSWORD length is adequate (${#MONGO_PASSWORD} characters)"
+    print_status "MONGO_INITDB_ROOT_PASSWORD length is adequate (${#MONGO_ROOT_PW} characters)"
 fi
 
 # Check Docker installation
@@ -101,11 +107,11 @@ else
 fi
 
 # Check Docker Compose
-if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
+if docker_compose version >/dev/null 2>&1; then
     print_status "Docker Compose is available"
 else
     print_error "Docker Compose is not available"
-    echo "Install Docker Compose and try again."
+    echo "Install docker-compose or the docker compose plugin and try again."
     exit 1
 fi
 
@@ -114,8 +120,8 @@ print_info "Checking container status..."
 
 # Detect container names from compose project (handles multi-instance)
 COMPOSE_PROJECT=$(basename "$(pwd)")
-NS_CONTAINER=$(docker-compose ps -q nightscout 2>/dev/null || echo "")
-MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null || echo "")
+NS_CONTAINER=$(docker_compose ps -q nightscout 2>/dev/null || echo "")
+MONGO_CONTAINER=$(docker_compose ps -q mongo 2>/dev/null || echo "")
 
 if [ -n "$NS_CONTAINER" ]; then
     NS_NAME=$(docker inspect --format='{{.Name}}' "$NS_CONTAINER" 2>/dev/null | sed 's/^\///')
@@ -128,18 +134,18 @@ if [ -n "$NS_CONTAINER" ]; then
         if [ "$HEALTH_STATUS" = "healthy" ]; then
             print_status "Nightscout container is healthy"
         elif [ "$HEALTH_STATUS" = "unhealthy" ]; then
-            print_error "Nightscout container is unhealthy"
-            print_info "Check logs: docker-compose logs nightscout"
+            fail_validation "Nightscout container is unhealthy"
+            print_info "Check logs: docker compose logs nightscout"
         else
             print_warning "Nightscout health status: $HEALTH_STATUS"
         fi
     else
         print_warning "Nightscout container exists but is not running"
-        echo "Start containers with: docker-compose up -d"
+        echo "Start containers with: docker compose up -d"
     fi
 else
     print_warning "Nightscout container is not running"
-    echo "Start containers with: docker-compose up -d"
+    echo "Start containers with: docker compose up -d"
 fi
 
 if [ -n "$MONGO_CONTAINER" ]; then
@@ -153,22 +159,22 @@ if [ -n "$MONGO_CONTAINER" ]; then
             print_status "MongoDB is responding to connections"
         else
             print_warning "MongoDB is not responding properly"
-            print_info "Check logs: docker-compose logs mongo"
+            print_info "Check logs: docker compose logs mongo"
         fi
     else
         print_warning "MongoDB container exists but is not running"
-        echo "Start containers with: docker-compose up -d"
+        echo "Start containers with: docker compose up -d"
     fi
 else
     print_warning "MongoDB container is not running"
-    echo "Start containers with: docker-compose up -d"
+    echo "Start containers with: docker compose up -d"
 fi
 
 # Check port availability
 print_info "Checking port availability..."
 
 # Check the configured host port (from .env or default 8080)
-HOST_PORT=$(grep "^HOST_PORT=" .env 2>/dev/null | cut -d'=' -f2)
+HOST_PORT=$(env_var_value HOST_PORT .env)
 HOST_PORT=${HOST_PORT:-8080}
 
 if netstat -an 2>/dev/null | grep -q ":${HOST_PORT} " || ss -tln 2>/dev/null | grep -q ":${HOST_PORT} "; then
@@ -182,7 +188,7 @@ print_info "Checking disk space..."
 
 DISK_USAGE=$(df . | tail -1 | awk '{print $5}' | sed 's/%//')
 if [ "$DISK_USAGE" -gt 90 ]; then
-    print_error "Disk usage is high (${DISK_USAGE}%)"
+    fail_validation "Disk usage is high (${DISK_USAGE}%)"
 elif [ "$DISK_USAGE" -gt 80 ]; then
     print_warning "Disk usage is moderate (${DISK_USAGE}%)"
 else
@@ -199,7 +205,7 @@ else
     echo "Images will be pulled when starting containers"
 fi
 
-MONGO_VERSION=$(grep "^MONGO_VERSION=" .env 2>/dev/null | cut -d'=' -f2)
+MONGO_VERSION=$(env_var_value MONGO_VERSION .env)
 MONGO_VERSION=${MONGO_VERSION:-7.0}
 if docker images | grep -q "mongo.*${MONGO_VERSION}"; then
     print_status "MongoDB Docker image (${MONGO_VERSION}) is available"
@@ -213,13 +219,18 @@ echo
 echo "📊 Validation Summary"
 echo "===================="
 
+if [ "$VALIDATION_FAILED" -ne 0 ]; then
+    print_error "Validation completed with errors. Fix the issues above before relying on this instance."
+    exit 1
+fi
+
 print_status "Configuration validation completed"
 echo
 echo "🎉 Your Nightscout setup appears to be ready!"
 echo
 echo "Next steps:"
-echo "1. Start containers: docker-compose up -d"
-echo "2. Check logs: docker-compose logs -f"
+echo "1. Start containers: docker compose up -d"
+echo "2. Check logs: docker compose logs -f"
 echo "3. Access Nightscout: http://localhost:${HOST_PORT}"
 
 # Show all instances

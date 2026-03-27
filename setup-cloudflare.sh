@@ -11,6 +11,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/instance-utils.sh"
+
 # Parse command line arguments
 DOMAIN=""
 TUNNEL_NAME=""
@@ -483,7 +486,7 @@ if ! curl -s -f "http://localhost:8080/api/v1/status" > /dev/null 2>&1; then
     fi
     
     # Start Nightscout
-    if docker-compose up -d; then
+    if docker_compose up -d; then
         print_status "Started Nightscout with Docker Compose"
         
         # Wait for Nightscout to be ready
@@ -495,7 +498,7 @@ if ! curl -s -f "http://localhost:8080/api/v1/status" > /dev/null 2>&1; then
                 break
             elif [ $i -eq 12 ]; then
                 print_warning "Nightscout may not be fully ready yet, but continuing tunnel test"
-                print_info "You can check Nightscout status with: docker-compose logs nightscout"
+                print_info "You can check Nightscout status with: docker compose logs nightscout"
             else
                 print_info "Waiting for Nightscout... (attempt $i/12)"
             fi
@@ -520,7 +523,7 @@ if ! curl -s -f "http://localhost:8080/api/v1/status" > /dev/null 2>&1; then
         fi
         
         print_info "Run './diagnose.sh' for full system diagnostics"
-        print_info "Or check logs with: docker-compose logs"
+        print_info "Or check logs with: docker compose logs"
         print_info "Skipping tunnel connectivity test"
     fi
 else
@@ -618,7 +621,7 @@ echo "- https://developers.cloudflare.com/cloudflare-one/connections/connect-app
 echo "- https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/tunnel-guide/"
 echo
 # Detect HOST_PORT from .env
-_HOST_PORT=$(grep "^HOST_PORT=" .env 2>/dev/null | cut -d'=' -f2)
+_HOST_PORT=$(env_var_value HOST_PORT .env)
 _HOST_PORT=${_HOST_PORT:-8080}
 
 if curl -s -f "http://localhost:${_HOST_PORT}/api/v1/status" > /dev/null 2>&1; then
@@ -635,5 +638,5 @@ else
     echo "   - External: https://$DOMAIN"
     echo
     echo "If Nightscout isn't running, start it with:"
-    echo "   docker-compose up -d"
+    echo "   docker compose up -d"
 fi

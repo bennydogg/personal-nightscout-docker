@@ -5,6 +5,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/instance-utils.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -54,7 +57,7 @@ fi
 # Check available utilities
 print_header "AVAILABLE UTILITIES"
 
-UTILITIES=("curl" "docker" "docker-compose" "lsof" "netstat" "ss" "dig" "nslookup" "htop" "systemctl" "journalctl")
+UTILITIES=("curl" "docker" "lsof" "netstat" "ss" "dig" "nslookup" "htop" "systemctl" "journalctl")
 
 for util in "${UTILITIES[@]}"; do
     if command -v "$util" >/dev/null 2>&1; then
@@ -72,8 +75,10 @@ if command -v docker >/dev/null 2>&1; then
         print_status "Docker daemon is running"
         echo "Docker version: $(docker --version)"
         
-        if command -v docker-compose >/dev/null 2>&1; then
-            echo "Docker Compose version: $(docker-compose --version)"
+        if docker_compose version >/dev/null 2>&1; then
+            echo "Docker Compose version: $(docker_compose version)"
+        else
+            print_warning "Docker Compose not found (install docker-compose or docker compose plugin)"
         fi
     else
         print_error "Docker daemon is not running"
@@ -196,7 +201,7 @@ if command -v curl >/dev/null 2>&1; then
         fi
     elif [ "$HTTP_RESPONSE" = "000" ]; then
         print_error "Cannot connect to Nightscout on port $DIAG_HOST_PORT"
-        print_info "Make sure Nightscout is running: docker-compose up -d"
+        print_info "Make sure Nightscout is running: docker compose up -d"
     else
         print_warning "Nightscout returned HTTP $HTTP_RESPONSE"
     fi
@@ -296,7 +301,7 @@ print_header "LOG ANALYSIS"
 
 print_info "Recent Docker logs for Nightscout:"
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    DIAG_NS_ID=$(docker-compose ps -q nightscout 2>/dev/null)
+    DIAG_NS_ID=$(docker_compose ps -q nightscout 2>/dev/null)
     if [ -n "$DIAG_NS_ID" ]; then
         docker logs --tail=10 "$DIAG_NS_ID" 2>/dev/null || print_warning "Cannot get Nightscout logs"
     else
@@ -305,7 +310,7 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
 
     echo
     print_info "Recent Docker logs for MongoDB:"
-    DIAG_MONGO_ID=$(docker-compose ps -q mongo 2>/dev/null)
+    DIAG_MONGO_ID=$(docker_compose ps -q mongo 2>/dev/null)
     if [ -n "$DIAG_MONGO_ID" ]; then
         docker logs --tail=5 "$DIAG_MONGO_ID" 2>/dev/null || print_warning "Cannot get MongoDB logs"
     else
@@ -328,15 +333,15 @@ print_header "RECOMMENDATIONS"
 
 echo "Based on the diagnostics above:"
 echo
-echo "1. If containers aren't running: docker-compose up -d"
+echo "1. If containers aren't running: docker compose up -d"
 echo "2. If ports are in use: Check what's using them with lsof -i :PORT"
-echo "3. If Nightscout isn't responding: Check logs with docker-compose logs nightscout"
+echo "3. If Nightscout isn't responding: Check logs with docker compose logs nightscout"
 echo "4. If tunnel isn't working: Check sudo journalctl -u cloudflared -f"
 echo "5. For real-time monitoring: Use docker stats or htop"
 echo
 echo "🔧 Useful commands:"
 echo "  - Check all services: ./diagnose.sh"
 echo "  - Monitor containers: docker stats"
-echo "  - View logs: docker-compose logs -f"
-echo "  - Restart services: docker-compose restart"
+echo "  - View logs: docker compose logs -f"
+echo "  - Restart services: docker compose restart"
 echo "  - Tunnel status: sudo systemctl status cloudflared"

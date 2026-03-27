@@ -220,8 +220,8 @@ fi
 if ! curl -s -f "http://localhost:${DBG_HOST_PORT}/api/v1/status" >/dev/null 2>&1; then
     print_warning "Nightscout is not running locally"
     echo "Start Nightscout first:"
-    echo "1. docker-compose up -d"
-    echo "2. Check container logs: docker-compose logs -f"
+    echo "1. docker compose up -d"
+    echo "2. Check container logs: docker compose logs -f"
 fi
 
 echo

@@ -142,8 +142,8 @@ print_info "Step 1: Creating instance directory..."
 mkdir -p "$INSTANCE_DIR"
 
 # Copy project files (not .env, not .git)
-for f in docker-compose.yml Dockerfile .env.example setup.sh setup-cloudflare.sh \
-         validate.sh validate-database.sh diagnose.sh debug-tunnel.sh fix-tunnel.sh \
+for f in docker-compose.yml Dockerfile .env.example ns setup.sh setup-cloudflare.sh \
+         validate.sh validate-database.sh list-instances.sh diagnose.sh debug-tunnel.sh fix-tunnel.sh \
          cleanup.sh cleanup-tunnels.sh backup.sh upgrade-mongodb.sh; do
     if [ -f "$SCRIPT_DIR/$f" ]; then
         cp "$SCRIPT_DIR/$f" "$INSTANCE_DIR/"
@@ -240,20 +240,20 @@ print_status "Generated .env with unique credentials"
 # =========================================================================
 print_info "Step 3: Starting new instance..."
 
-docker-compose up -d
+docker_compose up -d
 print_status "Instance started"
 
 # Wait for MongoDB to be ready
 print_info "Waiting for MongoDB to be ready..."
 for i in {1..30}; do
-    MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null)
+    MONGO_CONTAINER=$(docker_compose ps -q mongo 2>/dev/null)
     if [ -n "$MONGO_CONTAINER" ] && mongo_shell "$MONGO_CONTAINER" --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
         print_status "MongoDB is ready"
         break
     fi
     if [ $i -eq 30 ]; then
         print_error "MongoDB failed to become ready after 30 attempts"
-        print_info "Check logs: docker-compose logs mongo"
+        print_info "Check logs: docker compose logs mongo"
         exit 1
     fi
     sleep 2
@@ -280,7 +280,7 @@ if [ -n "$SOURCE_DIR" ]; then
     fi
 
     # Find the source mongo container
-    SRC_MONGO=$(cd "$SOURCE_DIR" && docker-compose ps -q mongo 2>/dev/null)
+    SRC_MONGO=$(cd "$SOURCE_DIR" && docker_compose ps -q mongo 2>/dev/null)
 
     if [ -n "$SRC_MONGO" ] && docker ps -q --filter "id=$SRC_MONGO" | grep -q .; then
         print_info "Source MongoDB is running, dumping data..."
@@ -302,12 +302,12 @@ if [ -n "$SOURCE_DIR" ]; then
         print_status "Data exported from source instance"
 
         # Restore to new instance
-        DEST_MONGO=$(docker-compose ps -q mongo)
+        DEST_MONGO=$(docker_compose ps -q mongo)
         docker cp "$DUMP_DIR/dump.archive" "$DEST_MONGO:/tmp/dump.archive"
 
         docker exec "$DEST_MONGO" mongorestore \
             --username root \
-            --password "$MONGO_PASSWORD" \
+            --password "$MONGO_ROOT_PASSWORD" \
             --authenticationDatabase admin \
             --archive="/tmp/dump.archive" \
             --gzip \
@@ -330,12 +330,12 @@ elif [ -n "$DUMP_FILE" ]; then
         exit 1
     fi
 
-    DEST_MONGO=$(docker-compose ps -q mongo)
+    DEST_MONGO=$(docker_compose ps -q mongo)
     docker cp "$DUMP_FILE" "$DEST_MONGO:/tmp/dump.archive"
 
     docker exec "$DEST_MONGO" mongorestore \
         --username root \
-        --password "$MONGO_PASSWORD" \
+        --password "$MONGO_ROOT_PASSWORD" \
         --authenticationDatabase admin \
         --archive="/tmp/dump.archive" \
         --gzip \
@@ -361,7 +361,7 @@ for i in {1..24}; do
     fi
     if [ $i -eq 24 ]; then
         print_warning "Nightscout not yet responding (may still be starting)"
-        print_info "Check logs: cd $INSTANCE_DIR && docker-compose logs -f"
+        print_info "Check logs: cd $INSTANCE_DIR && docker compose logs -f"
     fi
     sleep 5
 done
@@ -389,7 +389,7 @@ echo "  3. Restart cloudflared: sudo systemctl restart cloudflared"
 echo ""
 echo "Management:"
 echo "  cd $INSTANCE_DIR"
-echo "  docker-compose logs -f        # View logs"
-echo "  docker-compose restart        # Restart"
-echo "  docker-compose down           # Stop"
+echo "  docker compose logs -f        # View logs"
+echo "  docker compose restart          # Restart"
+echo "  docker compose down             # Stop"
 echo "  ./validate.sh                 # Validate config"

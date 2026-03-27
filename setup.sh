@@ -10,6 +10,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/instance-utils.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -91,7 +94,7 @@ if [ "$INTERACTIVE" = false ]; then
 fi
 
 # Check for required commands
-REQUIRED_COMMANDS=("openssl" "sed" "curl" "docker" "docker-compose")
+REQUIRED_COMMANDS=("openssl" "sed" "curl" "docker")
 MISSING_COMMANDS=()
 
 for cmd in "${REQUIRED_COMMANDS[@]}"; do
@@ -107,7 +110,14 @@ if [ ${#MISSING_COMMANDS[@]} -ne 0 ]; then
     done
     echo
     print_info "Install them with:"
-    echo "  sudo apt update && sudo apt install -y openssl sed curl docker.io docker-compose"
+    echo "  sudo apt update && sudo apt install -y openssl sed curl docker.io"
+    exit 1
+fi
+
+if ! docker_compose version >/dev/null 2>&1; then
+    print_error "Docker Compose is not available (need docker-compose or: docker compose plugin)"
+    echo "  sudo apt install -y docker-compose"
+    echo "  # or use Docker Engine with the compose plugin"
     exit 1
 fi
 
@@ -367,12 +377,12 @@ if [ "$SETUP_TUNNEL" = true ]; then
     
     # Step 1: Start Nightscout with Docker
     print_info "Step 1: Starting Nightscout with Docker Compose..."
-    if docker-compose up -d; then
+    if docker_compose up -d; then
         print_status "Docker Compose started successfully"
     else
         print_error "Failed to start Docker Compose"
         print_info "Please check for port conflicts or configuration issues"
-        print_info "Try: docker-compose logs"
+        print_info "Try: docker compose logs"
         exit 1
     fi
     
@@ -385,10 +395,10 @@ if [ "$SETUP_TUNNEL" = true ]; then
         print_info "Checking Nightscout health... (attempt $i/24)"
         
         # Check if container is running
-        if ! docker-compose ps nightscout | grep -q "Up"; then
+        if ! docker_compose ps nightscout | grep -q "Up"; then
             print_warning "Nightscout container is not running properly"
             print_info "Container status:"
-            docker-compose ps nightscout
+            docker_compose ps nightscout
             continue
         fi
         
@@ -400,9 +410,9 @@ if [ "$SETUP_TUNNEL" = true ]; then
         elif [ $i -eq 24 ]; then
             print_error "Nightscout failed to become ready after 2 minutes"
             print_info "Checking container logs:"
-            docker-compose logs --tail=20 nightscout
+            docker_compose logs --tail=20 nightscout
             print_info "Checking container status:"
-            docker-compose ps
+            docker_compose ps
             exit 1
         else
             print_info "Nightscout not ready yet, waiting... (${i}/24)"
@@ -442,12 +452,12 @@ else
         echo
         echo "Next steps:"
         echo "1. Set up Cloudflare tunnel: ./setup-cloudflare.sh --domain $DOMAIN --tunnel-name $TUNNEL_NAME"
-        echo "2. Start Nightscout: docker-compose up -d"
+        echo "2. Start Nightscout: docker compose up -d"
         echo "3. Access at: https://$DOMAIN"
     else
         echo "Next steps:"
         echo "1. Review your .env file: cat .env"
-        echo "2. Start Nightscout: docker-compose up -d"
+        echo "2. Start Nightscout: docker compose up -d"
         echo "3. Verify it's running: curl http://localhost:8080/api/v1/status"
         echo "4. For Cloudflare tunnel: ./setup-cloudflare.sh"
     fi

@@ -129,4 +129,4 @@ echo "🌐 Your Nightscout will be available at:"
 echo "   https://$DOMAIN"
 echo
 echo "🚀 Ready to start Nightscout:"
-echo "   docker-compose up -d" 
+echo "   docker compose up -d" 

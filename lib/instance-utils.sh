@@ -5,6 +5,24 @@
 # Default base directory for multi-instance deployments
 NIGHTSCOUT_BASE_DIR="${NIGHTSCOUT_BASE_DIR:-/opt/nightscout}"
 
+# Invoke Docker Compose (v1 standalone binary or v2 plugin).
+docker_compose() {
+    if command -v docker-compose >/dev/null 2>&1; then
+        docker-compose "$@"
+    elif docker compose version >/dev/null 2>&1; then
+        docker compose "$@"
+    else
+        echo "docker compose is not available (install docker-compose or the docker compose plugin)" >&2
+        return 127
+    fi
+}
+
+# Read KEY=value from a file; value may contain '=' (e.g. base64 secrets).
+env_var_value() {
+    local key="$1" file="${2:-.env}"
+    grep "^${key}=" "$file" 2>/dev/null | head -1 | sed "s/^${key}=//"
+}
+
 # Colors (safe to re-source; these are just variable assignments)
 _IU_RED='\033[0;31m'
 _IU_GREEN='\033[0;32m'
@@ -41,22 +59,20 @@ discover_instances() {
     fi
 
     # --- Pass 2: Find running nightscout containers not in known dirs ---
+    # Use process substitution so the loop runs in this shell (seen_dirs works).
     if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-        # Look for containers from compose projects with a nightscout service
-        docker ps -a --filter "label=com.docker.compose.service=nightscout" \
-            --format '{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null \
-            | sort -u | while read -r cdir; do
-                [ -n "$cdir" ] || continue
-                # Skip if we already found this dir
-                local already=false
-                for s in "${seen_dirs[@]}"; do
-                    if [ "$s" = "$cdir" ]; then already=true; break; fi
-                done
-                $already && continue
-                if [ -f "$cdir/docker-compose.yml" ]; then
-                    _emit_instance_info "$cdir"
-                fi
+        while read -r cdir; do
+            [ -n "$cdir" ] || continue
+            local already=false
+            for s in "${seen_dirs[@]}"; do
+                if [ "$s" = "$cdir" ]; then already=true; break; fi
             done
+            $already && continue
+            if [ -f "$cdir/docker-compose.yml" ]; then
+                _emit_instance_info "$cdir"
+            fi
+        done < <(docker ps -a --filter "label=com.docker.compose.service=nightscout" \
+            --format '{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null | sort -u)
     fi
 }
 
@@ -67,16 +83,16 @@ _emit_instance_info() {
 
     name=$(basename "$dir")
 
-    # Read config from .env
-    host_port=$(grep "^HOST_PORT=" "$dir/.env" 2>/dev/null | head -1 | sed 's/^HOST_PORT=//')
+    # Read config from .env (values may contain '=')
+    host_port=$(env_var_value HOST_PORT "$dir/.env")
     host_port=${host_port:-8080}
-    domain=$(grep "^CLOUDFLARE_DOMAIN=" "$dir/.env" 2>/dev/null | head -1 | sed 's/^CLOUDFLARE_DOMAIN=//')
+    domain=$(env_var_value CLOUDFLARE_DOMAIN "$dir/.env")
     domain=${domain:--}
 
     # Check container status via compose
     local ns_id mongo_id
-    ns_id=$(cd "$dir" && docker-compose ps -q nightscout 2>/dev/null)
-    mongo_id=$(cd "$dir" && docker-compose ps -q mongo 2>/dev/null)
+    ns_id=$(cd "$dir" && docker_compose ps -q nightscout 2>/dev/null)
+    mongo_id=$(cd "$dir" && docker_compose ps -q mongo 2>/dev/null)
 
     if [ -n "$ns_id" ] && docker ps -q --filter "id=$ns_id" 2>/dev/null | grep -q .; then
         container_status="running"
@@ -164,7 +180,7 @@ check_port_available() {
         for dir in "$NIGHTSCOUT_BASE_DIR"/*/; do
             [ -f "$dir/.env" ] || continue
             local ep en
-            ep=$(grep "^HOST_PORT=" "$dir/.env" 2>/dev/null | head -1 | sed 's/^HOST_PORT=//')
+            ep=$(env_var_value HOST_PORT "$dir/.env")
             en=$(basename "$dir")
             if [ "$ep" = "$port" ] && [ "$en" != "$exclude" ]; then
                 echo "Port $port is configured by instance '$en' ($dir)"
@@ -187,7 +203,7 @@ check_port_available() {
         # If we have an exclude name, check if it's our own instance binding the port
         if [ -n "$exclude" ] && [ -d "$NIGHTSCOUT_BASE_DIR/$exclude" ]; then
             local own_ns_id
-            own_ns_id=$(cd "$NIGHTSCOUT_BASE_DIR/$exclude" && docker-compose ps -q nightscout 2>/dev/null)
+            own_ns_id=$(cd "$NIGHTSCOUT_BASE_DIR/$exclude" && docker_compose ps -q nightscout 2>/dev/null)
             if [ -n "$own_ns_id" ] && docker ps -q --filter "id=$own_ns_id" 2>/dev/null | grep -q .; then
                 # It's our own instance, that's fine
                 return 0
@@ -230,7 +246,7 @@ mongo_shell() {
 # ---------------------------------------------------------------------------
 mongo_shell_compose() {
     local mongo_container
-    mongo_container=$(docker-compose ps -q mongo 2>/dev/null)
+    mongo_container=$(docker_compose ps -q mongo 2>/dev/null)
     if [ -z "$mongo_container" ]; then
         echo "MongoDB container not found" >&2
         return 1

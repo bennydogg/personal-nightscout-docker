@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Nightscout unified CLI — dispatches to scripts in this directory (repo or instance root).
+set -e
+NS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/ns-cli.sh
+source "$NS_ROOT/lib/ns-cli.sh"
+ns_main "$@"

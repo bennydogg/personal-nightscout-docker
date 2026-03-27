@@ -100,9 +100,9 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 # MongoDB container must be running
-MONGO_CONTAINER=$(cd "$SCRIPT_DIR" && docker-compose ps -q mongo 2>/dev/null)
+MONGO_CONTAINER=$(cd "$SCRIPT_DIR" && docker_compose ps -q mongo 2>/dev/null)
 if [ -z "$MONGO_CONTAINER" ] || ! docker ps -q --filter "id=$MONGO_CONTAINER" 2>/dev/null | grep -q .; then
-    print_error "MongoDB container is not running. Start with: docker-compose up -d"
+    print_error "MongoDB container is not running. Start with: docker compose up -d"
     exit 1
 fi
 
@@ -247,5 +247,5 @@ echo "  # Decrypt (if encrypted):"
 echo "  # Extract (if compressed):"
 echo "  tar xzf ${BACKUP_FILE%.enc} -C /tmp/"
 echo "  # Restore:"
-echo "  docker cp /tmp/${BACKUP_NAME}/mongo.archive \$(docker-compose ps -q mongo):/tmp/"
-echo "  docker-compose exec mongo mongorestore --username root --password \$MONGO_PASSWORD --authenticationDatabase admin --archive=/tmp/mongo.archive --gzip --drop"
+echo "  docker cp /tmp/${BACKUP_NAME}/mongo.archive \$(docker compose ps -q mongo):/tmp/"
+echo "  docker compose exec mongo mongorestore --username root --password \$MONGO_PASSWORD --authenticationDatabase admin --archive=/tmp/mongo.archive --gzip --drop"

@@ -179,9 +179,9 @@ for (( i=CURRENT_IDX; i<TARGET_IDX; i++ )); do
 
     if $DRY_RUN; then
         echo "  [DRY RUN] Would set featureCompatibilityVersion to '$FROM_VERSION' (using $SHELL_CMD)"
-        echo "  [DRY RUN] Would run: docker-compose down"
+        echo "  [DRY RUN] Would run: docker compose down"
         echo "  [DRY RUN] Would update MONGO_VERSION=$TO_VERSION in .env"
-        echo "  [DRY RUN] Would run: docker-compose up -d"
+        echo "  [DRY RUN] Would run: docker compose up -d"
         echo "  [DRY RUN] Would wait for MongoDB to be ready (using $NEW_SHELL_CMD)"
         echo "  [DRY RUN] Would set featureCompatibilityVersion to '$TO_VERSION'"
         echo "  [DRY RUN] Would verify Nightscout health on port $HOST_PORT"
@@ -190,12 +190,12 @@ for (( i=CURRENT_IDX; i<TARGET_IDX; i++ )); do
     fi
 
     # 1. Ensure containers are running for FCV set
-    MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null)
+    MONGO_CONTAINER=$(docker_compose ps -q mongo 2>/dev/null)
     if [ -z "$MONGO_CONTAINER" ] || ! docker ps -q --filter "id=$MONGO_CONTAINER" 2>/dev/null | grep -q .; then
         print_info "Starting containers for FCV check..."
-        docker-compose up -d
+        docker_compose up -d
         sleep 5
-        MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null)
+        MONGO_CONTAINER=$(docker_compose ps -q mongo 2>/dev/null)
     fi
 
     # 2. Set FCV to current version (required before upgrading)
@@ -206,7 +206,7 @@ for (( i=CURRENT_IDX; i<TARGET_IDX; i++ )); do
         print_status "FCV set to $FROM_VERSION"
     else
         print_error "Failed to set featureCompatibilityVersion to $FROM_VERSION"
-        print_info "Check: docker-compose logs mongo"
+        print_info "Check: docker compose logs mongo"
         exit 1
     fi
 
@@ -218,7 +218,7 @@ for (( i=CURRENT_IDX; i<TARGET_IDX; i++ )); do
 
     # 3. Stop containers
     print_info "Stopping containers..."
-    docker-compose down
+    docker_compose down
     print_status "Containers stopped"
 
     # 4. Update MONGO_VERSION in .env
@@ -233,12 +233,12 @@ for (( i=CURRENT_IDX; i<TARGET_IDX; i++ )); do
 
     # 5. Start containers with new version
     print_info "Starting containers with MongoDB $TO_VERSION..."
-    docker-compose up -d
+    docker_compose up -d
     print_status "Containers starting"
 
     # 6. Wait for MongoDB to be ready
     print_info "Waiting for MongoDB $TO_VERSION to be ready..."
-    MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null)
+    MONGO_CONTAINER=$(docker_compose ps -q mongo 2>/dev/null)
     READY=false
     for attempt in {1..60}; do
         if [ -n "$MONGO_CONTAINER" ] && mongo_shell "$MONGO_CONTAINER" \
@@ -248,14 +248,14 @@ for (( i=CURRENT_IDX; i<TARGET_IDX; i++ )); do
             break
         fi
         # Re-fetch container ID in case it changed
-        MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null)
+        MONGO_CONTAINER=$(docker_compose ps -q mongo 2>/dev/null)
         sleep 2
     done
 
     if ! $READY; then
         print_error "MongoDB $TO_VERSION failed to become ready after 120 seconds"
-        print_info "Check logs: docker-compose logs mongo"
-        print_warning "To rollback: edit .env, set MONGO_VERSION=$FROM_VERSION, then docker-compose up -d"
+        print_info "Check logs: docker compose logs mongo"
+        print_warning "To rollback: edit .env, set MONGO_VERSION=$FROM_VERSION, then docker compose up -d"
         exit 1
     fi
     print_status "MongoDB $TO_VERSION is ready"
@@ -288,7 +288,7 @@ for (( i=CURRENT_IDX; i<TARGET_IDX; i++ )); do
         print_status "Nightscout is healthy on port $HOST_PORT"
     else
         print_warning "Nightscout not yet responding (may still be starting)"
-        print_info "Check: docker-compose logs -f nightscout"
+        print_info "Check: docker compose logs -f nightscout"
     fi
 
     echo ""
@@ -313,7 +313,7 @@ else
     echo "Version:     $CURRENT_VERSION → $TARGET_VERSION"
     echo ""
     echo "Verify with:"
-    echo "  docker-compose exec mongo mongosh --eval \"db.adminCommand({getParameter:1, featureCompatibilityVersion:1})\""
+    echo "  docker compose exec mongo mongosh --eval \"db.adminCommand({getParameter:1, featureCompatibilityVersion:1})\""
     echo "  ./validate.sh"
     echo "  ./validate-database.sh"
 fi

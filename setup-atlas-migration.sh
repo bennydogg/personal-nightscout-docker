@@ -139,7 +139,7 @@ fi
 echo ""
 
 # Check for required commands
-REQUIRED_COMMANDS=("mongodump" "mongorestore" "docker" "docker-compose" "openssl" "curl")
+REQUIRED_COMMANDS=("mongodump" "mongorestore" "docker" "openssl" "curl")
 MISSING_COMMANDS=()
 
 for cmd in "${REQUIRED_COMMANDS[@]}"; do
@@ -160,7 +160,13 @@ if [ ${#MISSING_COMMANDS[@]} -ne 0 ]; then
     echo "  sudo dpkg -i mongodb-database-tools-*.deb"
     echo ""
     echo "  # Docker"
-    echo "  sudo apt update && sudo apt install -y docker.io docker-compose openssl curl"
+    echo "  sudo apt update && sudo apt install -y docker.io openssl curl"
+    echo "  # plus docker-compose or docker compose plugin"
+    exit 1
+fi
+
+if ! docker_compose version >/dev/null 2>&1; then
+    print_error "Docker Compose is not available (install docker-compose or docker compose plugin)"
     exit 1
 fi
 
@@ -274,7 +280,7 @@ fi
 print_step "4" "Starting MongoDB container for data import"
 
 print_info "Starting MongoDB container..."
-if docker-compose up -d mongo; then
+if docker_compose up -d mongo; then
     print_status "MongoDB container started"
 else
     print_error "Failed to start MongoDB container"
@@ -295,7 +301,7 @@ for i in {1..30}; do
         break
     elif [ $i -eq 30 ]; then
         print_error "MongoDB failed to start after 60 seconds"
-        print_info "Check logs: docker-compose logs mongo"
+        print_info "Check logs: docker compose logs mongo"
         exit 1
     fi
 done
@@ -313,7 +319,7 @@ fi
 print_info "Starting MongoDB container for import..."
 
 # Start MongoDB container without port mapping
-if docker-compose up -d mongo; then
+if docker_compose up -d mongo; then
     print_status "MongoDB container started"
 else
     print_error "Failed to start MongoDB container"
@@ -334,7 +340,7 @@ for i in {1..30}; do
         break
     elif [ $i -eq 30 ]; then
         print_error "MongoDB failed to start after 60 seconds"
-        print_info "Check logs: docker-compose logs mongo"
+        print_info "Check logs: docker compose logs mongo"
         exit 1
     fi
 done
@@ -367,16 +373,16 @@ if [ "$USE_OPLOG" = true ]; then
     IMPORT_CMD="$IMPORT_CMD --oplogReplay"
 fi
 
-if docker-compose exec -T mongo $IMPORT_CMD; then
+if docker_compose exec -T mongo $IMPORT_CMD; then
     print_status "Data import completed successfully"
 else
     print_error "Data import failed!"
-    print_info "Check MongoDB logs: docker-compose logs mongo"
+    print_info "Check MongoDB logs: docker compose logs mongo"
     exit 1
 fi
 
 # Clean up import data from container
-docker-compose exec -T mongo rm -rf /tmp/import_data
+docker_compose exec -T mongo rm -rf /tmp/import_data
 
 print_status "MongoDB data import completed"
 
@@ -402,7 +408,7 @@ fi
 print_step "6" "Starting complete Nightscout application"
 
 print_info "Starting all services..."
-if docker-compose up -d; then
+if docker_compose up -d; then
     print_status "Nightscout application started"
 else
     print_error "Failed to start Nightscout application"
@@ -423,7 +429,7 @@ for i in {1..30}; do
         break
     elif [ $i -eq 30 ]; then
         print_error "Nightscout failed to become ready after 2.5 minutes"
-        print_info "Check logs: docker-compose logs nightscout"
+        print_info "Check logs: docker compose logs nightscout"
         exit 1
     fi
 done

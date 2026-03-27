@@ -62,10 +62,10 @@ fi
 print_info "Database name: $DB_NAME"
 
 # Check if containers are running
-MONGO_CONTAINER=$(docker-compose ps -q mongo 2>/dev/null)
+MONGO_CONTAINER=$(docker_compose ps -q mongo 2>/dev/null)
 if [ -z "$MONGO_CONTAINER" ] || ! docker ps -q --filter "id=$MONGO_CONTAINER" 2>/dev/null | grep -q .; then
     print_error "MongoDB container is not running"
-    print_info "Start containers with: docker-compose up -d"
+    print_info "Start containers with: docker compose up -d"
     exit 1
 fi
 
@@ -156,4 +156,4 @@ echo "1. Check that the database name in the connection string matches your impo
 echo "2. Verify the data was imported to the correct database"
 echo "3. Update the connection string if needed:"
 echo "   sed -i.bak 's|MONGO_CONNECTION=.*|MONGO_CONNECTION=mongodb://root:PASSWORD@mongo:27017/CORRECT_DB_NAME?authSource=admin|' .env"
-echo "4. Restart Nightscout: docker-compose restart nightscout" 
+echo "4. Restart Nightscout: docker compose restart nightscout" 

@@ -2,30 +2,32 @@
 
 Docker setup for deploying [Nightscout](https://nightscout.github.io/) CGM with secure external access via Cloudflare Tunnel. Supports multiple instances on a single server.
 
+**Prefer the unified CLI** (`./ns`) for discovery and troubleshooting—it wraps the same `*.sh` scripts so you have one entrypoint. Run `./ns help` for all commands. Individual scripts remain for compatibility and automation.
+
 ## Quick Start
 
 ### Single Instance
 
 ```bash
 # Automated setup with Cloudflare tunnel
-./setup.sh --domain nightscout.yourdomain.com --setup-tunnel
-docker-compose up -d
+./ns setup --domain nightscout.yourdomain.com --setup-tunnel
+docker compose up -d
 
 # Or step-by-step
-./setup.sh --domain nightscout.yourdomain.com
-./setup-cloudflare.sh --domain nightscout.yourdomain.com
-docker-compose up -d
+./ns setup --domain nightscout.yourdomain.com
+./ns tunnel --domain nightscout.yourdomain.com
+docker compose up -d
 ```
 
 ### Multiple Instances (one server, multiple users)
 
 ```bash
 # Create per-user instances with unique ports
-./migrate-instance.sh --name alice --domain alice-ns.example.com --port 8081
-./migrate-instance.sh --name bob --domain bob-ns.example.com --port 8082
+./ns migrate --name alice --domain alice-ns.example.com --port 8081
+./ns migrate --name bob --domain bob-ns.example.com --port 8082
 
 # Check status of all instances
-./list-instances.sh
+./ns list
 ```
 
 Each instance gets its own directory under `/opt/nightscout/<name>/` with independent configuration, database, and containers.
@@ -34,17 +36,17 @@ Each instance gets its own directory under `/opt/nightscout/<name>/` with indepe
 
 ```bash
 # From a running instance (copies data automatically)
-./migrate-instance.sh --name alice --domain alice-ns.example.com --port 8081 \
+./ns migrate --name alice --domain alice-ns.example.com --port 8081 \
   --source /path/to/old/instance
 
 # From a mongodump file
-./migrate-instance.sh --name alice --domain alice-ns.example.com --port 8081 \
+./ns migrate --name alice --domain alice-ns.example.com --port 8081 \
   --dump /tmp/backup.gz
 ```
 
 ## Architecture
 
-Each instance runs two containers via docker-compose:
+Each instance runs two containers via Docker Compose:
 
 - **nightscout** — `nightscout/cgm-remote-monitor:15.0.6` (internal port 1337, mapped to `HOST_PORT`)
 - **mongo** — `mongo:7.0` (configurable via `MONGO_VERSION`) with WiredTiger cache capped at 0.25GB per instance
@@ -76,7 +78,7 @@ sudo systemctl restart cloudflared
 
 ## Configuration
 
-All configuration is via `.env` file per instance (created by `setup.sh` or `migrate-instance.sh`).
+All configuration is via `.env` file per instance (created by `ns setup` / `ns migrate` or the underlying scripts).
 
 ### Key Variables
 
@@ -95,11 +97,13 @@ All configuration is via `.env` file per instance (created by `setup.sh` or `mig
 
 ### Command Line Options
 
-**`./setup.sh`**: `--domain DOMAIN`, `--setup-tunnel`, `--help`
+Use **`./ns help`** for the command map. Under the hood:
 
-**`./setup-cloudflare.sh`**: `--domain DOMAIN`, `--tunnel-name NAME`, `--non-interactive`, `--help`
+**`setup.sh` / `ns setup`**: `--domain DOMAIN`, `--setup-tunnel`, `--help`
 
-**`./migrate-instance.sh`**: `--name NAME`, `--domain DOMAIN`, `--port PORT`, `--source DIR`, `--dump FILE`, `--base-dir DIR`, `--help`
+**`setup-cloudflare.sh` / `ns tunnel`**: `--domain DOMAIN`, `--tunnel-name NAME`, `--non-interactive`, `--help`
+
+**`migrate-instance.sh` / `ns migrate`**: `--name NAME`, `--domain DOMAIN`, `--port PORT`, `--source DIR`, `--dump FILE`, `--base-dir DIR`, `--help`
 
 ## Management
 
@@ -107,33 +111,34 @@ All configuration is via `.env` file per instance (created by `setup.sh` or `mig
 # All commands run from the instance directory (e.g., /opt/nightscout/alice/)
 
 # Start/stop
-docker-compose up -d
-docker-compose down
+docker compose up -d
+docker compose down
 
 # Logs
-docker-compose logs -f
-docker-compose logs -f nightscout
-docker-compose logs -f mongo
+docker compose logs -f
+docker compose logs -f nightscout
+docker compose logs -f mongo
 
-# Validate
-./validate.sh
+# Validate (same as ./validate.sh)
+./ns validate
 
 # Update Nightscout
-docker-compose down
-docker-compose pull
-docker-compose up -d
+docker compose down
+docker compose pull
+docker compose up -d
 
-# List all instances and status
-./list-instances.sh
+# List all instances and status (from repo root or anywhere)
+./ns list
 
 # Cleanup (destroys data for THIS instance only)
-./cleanup.sh
+./ns cleanup
 ```
 
-## Scripts
+## Scripts and CLI
 
-| Script | Purpose |
+| Entry | Purpose |
 |--------|---------|
+| **`ns`** | **Unified CLI** — run `./ns help`; dispatches to the scripts below |
 | `setup.sh` | Initial setup, generates `.env` with secure credentials |
 | `setup-cloudflare.sh` | Cloudflare tunnel creation and configuration |
 | `migrate-instance.sh` | Create per-user instances, optional data migration |
@@ -147,6 +152,7 @@ docker-compose up -d
 | `backup.sh` | MongoDB backup with encryption support |
 | `upgrade-mongodb.sh` | Stepped MongoDB version upgrade (4.4 → 7.0) |
 | `lib/instance-utils.sh` | Shared instance discovery and MongoDB shell helpers |
+| `lib/ns-cli.sh` | Help text and command dispatch for `ns` |
 
 ## Troubleshooting
 
@@ -154,30 +160,30 @@ docker-compose up -d
 
 ```bash
 # Debug comprehensively
-./debug-tunnel.sh
+./ns debug-tunnel
 
 # Quick fix
-./fix-tunnel.sh
+./ns fix-tunnel
 
 # Check service
 sudo systemctl status cloudflared
 sudo journalctl -u cloudflared -f
 
 # Recreate tunnel
-./cleanup-tunnels.sh
-./setup-cloudflare.sh --domain your.domain.com
+./ns cleanup-tunnels
+./ns tunnel --domain your.domain.com
 ```
 
 ### Container Issues
 
 ```bash
 # Check what's running
-docker-compose ps
-docker-compose logs nightscout
-docker-compose logs mongo
+docker compose ps
+docker compose logs nightscout
+docker compose logs mongo
 
 # Test MongoDB
-docker-compose exec mongo mongosh --eval "db.adminCommand('ping')"
+docker compose exec mongo mongosh --eval "db.adminCommand('ping')"
 
 # Port conflict
 # Check what's using a port:
@@ -189,10 +195,10 @@ ss -tlnp | grep :8080
 
 ```bash
 # See all instances and their status
-./list-instances.sh
+./ns list
 
 # Validate current instance
-./validate.sh
+./ns validate
 ```
 
 ## Security
@@ -209,13 +215,13 @@ To upgrade an existing instance from an older MongoDB version:
 
 ```bash
 # Preview the upgrade plan
-./upgrade-mongodb.sh --dry-run
+./ns upgrade-mongo --dry-run
 
 # Upgrade to 7.0 (steps through 5.0, 6.0 automatically)
-./upgrade-mongodb.sh
+./ns upgrade-mongo
 
 # Or stop at an intermediate version
-./upgrade-mongodb.sh --target 5.0
+./ns upgrade-mongo --target 5.0
 ```
 
 The script handles `featureCompatibilityVersion` at each step and backs up data before starting.

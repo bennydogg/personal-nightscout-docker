@@ -6,6 +6,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/instance-utils.sh"
 
 echo "🧹 Nightscout Cleanup Script"
 echo "============================"
@@ -40,12 +41,9 @@ print_info "Compose project: $COMPOSE_PROJECT"
 echo
 
 # Show all instances for context so you know what you're cleaning up
-if [ -f "$SCRIPT_DIR/lib/instance-utils.sh" ]; then
-    source "$SCRIPT_DIR/lib/instance-utils.sh"
-    echo "All known instances:"
-    print_instance_table 2>/dev/null || true
-    echo
-fi
+echo "All known instances:"
+print_instance_table 2>/dev/null || true
+echo
 
 # Confirm cleanup
 print_warning "This will remove containers, volumes, and data for THIS instance only."
@@ -60,13 +58,13 @@ fi
 
 # Stop and remove containers and volumes via compose (scoped to this project)
 print_info "Stopping and removing containers and volumes..."
-if docker-compose ps -q 2>/dev/null | head -1 | grep -q .; then
-    docker-compose down -v
+if docker_compose ps -q 2>/dev/null | head -1 | grep -q .; then
+    docker_compose down -v
     print_status "Containers and volumes removed"
 else
     print_info "No running containers found for this project"
     # Still run down -v to clean up stopped containers/volumes
-    docker-compose down -v 2>/dev/null || true
+    docker_compose down -v 2>/dev/null || true
 fi
 
 # Remove configuration files
@@ -131,4 +129,4 @@ echo
 echo "Next steps:"
 echo "1. Run ./setup.sh to configure Nightscout"
 echo "2. Run ./setup-cloudflare.sh to set up Cloudflare Tunnel"
-echo "3. Start services with: docker-compose up -d" 
+echo "3. Start services with: docker compose up -d" 

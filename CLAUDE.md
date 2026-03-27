@@ -8,7 +8,7 @@ Personal Nightscout CGM (Continuous Glucose Monitoring) deployment using Docker.
 
 ## Architecture
 
-Two Docker containers per instance, orchestrated via docker-compose:
+Two Docker containers per instance, orchestrated via Docker Compose:
 - **nightscout**: `nightscout/cgm-remote-monitor:15.0.6` - CGM data visualization web app (internal port 1337, mapped to configurable `HOST_PORT`)
 - **mongo**: `mongo:${MONGO_VERSION:-7.0}` - Data persistence with named volume, WiredTiger cache capped at 0.25GB by default
 
@@ -24,21 +24,25 @@ Each user gets their own directory with independent compose project, `.env`, and
 ```
 One Cloudflare tunnel with multiple ingress rules routes subdomains to different local ports.
 
+## Unified CLI (`ns`)
+
+Prefer **`./ns`** as the single entrypoint: `./ns help` lists subcommands (setup, migrate, validate, list, tunnel, backup, etc.). It `exec`s the same `*.sh` scripts—no duplicate logic.
+
 ## Common Commands
 
 ```bash
 # Create/migrate an instance
-./migrate-instance.sh --name alice --domain alice-ns.example.com --port 8081
-./migrate-instance.sh --name bob --domain bob-ns.example.com --port 8082 --source /old/instance
+./ns migrate --name alice --domain alice-ns.example.com --port 8081
+./ns migrate --name bob --domain bob-ns.example.com --port 8082 --source /old/instance
 
 # Per-instance management (run from instance directory)
-docker-compose up -d
-docker-compose down
-docker-compose logs -f
-./validate.sh
+docker compose up -d
+docker compose down
+docker compose logs -f
+./ns validate
 
 # Initial single-instance setup
-./setup.sh --domain nightscout.yourdomain.com --setup-tunnel
+./ns setup --domain nightscout.yourdomain.com --setup-tunnel
 ```
 
 ## Configuration
@@ -54,10 +58,16 @@ All configuration via `.env` file per instance. Key variables:
 
 ## Script Categories
 
+**CLI**: `ns` + `lib/ns-cli.sh` (dispatch and help)—use this first.
+
 **Setup**: `setup.sh` (main), `setup-cloudflare.sh` (tunnel), `migrate-instance.sh` (multi-instance)
+
 **Validation**: `validate.sh`, `validate-database.sh`, `validate-migration.sh`
+
 **Tunnel debugging**: `debug-tunnel.sh`, `fix-tunnel.sh`, `cleanup-tunnels.sh`
+
 **Migration**: `export-atlas-db.sh` (from Atlas), `import-to-vm.sh` (to local), `migrate-instance.sh` (instance-to-instance)
+
 **Maintenance**: `cleanup.sh` (scoped to current compose project), `backup.sh`, `diagnose.sh`, `upgrade-mongodb.sh`
 
-All scripts are bash, use `set -e`, and share a common colored output pattern (`print_status`, `print_warning`, `print_error`, `print_info`). Scripts use the `mongo_shell()` helper from `lib/instance-utils.sh` to auto-detect `mongosh` vs legacy `mongo` shell, so they work across MongoDB 4.4–7.0.
+All scripts are bash, use `set -e`, and share a common colored output pattern (`print_status`, `print_warning`, `print_error`, `print_info`). Scripts use the `mongo_shell()` helper from `lib/instance-utils.sh` to auto-detect `mongosh` vs legacy `mongo` shell, so they work across MongoDB 4.4–7.0. Use `docker_compose()` from `instance-utils.sh` for Compose v1 vs v2 plugin compatibility.
